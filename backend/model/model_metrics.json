@@ -1,0 +1,205 @@
+{
+  "status": "trained",
+  "primary_model": "Logistic Regression",
+  "dataset_info": {
+    "total_samples": 470,
+    "real_samples": 260,
+    "fake_samples": 210,
+    "train_size": 376,
+    "test_size": 94,
+    "split_ratio": "80:20 Stratified",
+    "feature_count": 2023
+  },
+  "models": {
+    "Logistic Regression": {
+      "accuracy": 97.87,
+      "precision_fake": 95.45,
+      "recall_fake": 100.0,
+      "f1_fake": 97.67,
+      "precision_real": 100.0,
+      "recall_real": 96.15,
+      "f1_real": 98.04,
+      "macro_f1": 97.86,
+      "confusion_matrix": {
+        "true_negative": 50,
+        "false_positive": 2,
+        "false_negative": 0,
+        "true_positive": 42
+      }
+    },
+    "Naive Bayes": {
+      "accuracy": 100.0,
+      "precision_fake": 100.0,
+      "recall_fake": 100.0,
+      "f1_fake": 100.0,
+      "precision_real": 100.0,
+      "recall_real": 100.0,
+      "f1_real": 100.0,
+      "macro_f1": 100.0,
+      "confusion_matrix": {
+        "true_negative": 52,
+        "false_positive": 0,
+        "false_negative": 0,
+        "true_positive": 42
+      }
+    },
+    "Random Forest": {
+      "accuracy": 96.81,
+      "precision_fake": 93.33,
+      "recall_fake": 100.0,
+      "f1_fake": 96.55,
+      "precision_real": 100.0,
+      "recall_real": 94.23,
+      "f1_real": 97.03,
+      "macro_f1": 96.79,
+      "confusion_matrix": {
+        "true_negative": 49,
+        "false_positive": 3,
+        "false_negative": 0,
+        "true_positive": 42
+      }
+    },
+    "Support Vector Machine": {
+      "accuracy": 100.0,
+      "precision_fake": 100.0,
+      "recall_fake": 100.0,
+      "f1_fake": 100.0,
+      "precision_real": 100.0,
+      "recall_real": 100.0,
+      "f1_real": 100.0,
+      "macro_f1": 100.0,
+      "confusion_matrix": {
+        "true_negative": 52,
+        "false_positive": 0,
+        "false_negative": 0,
+        "true_positive": 42
+      }
+    }
+  },
+  "explainability": {
+    "top_fake_signals": [
+      {
+        "keyword": "earn",
+        "weight": 0.929
+      },
+      {
+        "keyword": "daily",
+        "weight": 0.859
+      },
+      {
+        "keyword": "urgent",
+        "weight": 0.802
+      },
+      {
+        "keyword": "apply",
+        "weight": 0.79
+      },
+      {
+        "keyword": "pay",
+        "weight": 0.728
+      },
+      {
+        "keyword": "rs",
+        "weight": 0.683
+      },
+      {
+        "keyword": "training",
+        "weight": 0.581
+      },
+      {
+        "keyword": "interview",
+        "weight": 0.572
+      },
+      {
+        "keyword": "whatsapp",
+        "weight": 0.562
+      },
+      {
+        "keyword": "home",
+        "weight": 0.537
+      },
+      {
+        "keyword": "work home",
+        "weight": 0.531
+      },
+      {
+        "keyword": "aadhaar",
+        "weight": 0.53
+      },
+      {
+        "keyword": "work",
+        "weight": 0.528
+      },
+      {
+        "keyword": "pan",
+        "weight": 0.523
+      },
+      {
+        "keyword": "submit",
+        "weight": 0.523
+      }
+    ],
+    "top_real_signals": [
+      {
+        "keyword": "science",
+        "weight": 0.563
+      },
+      {
+        "keyword": "engineering",
+        "weight": 0.515
+      },
+      {
+        "keyword": "digital",
+        "weight": 0.51
+      },
+      {
+        "keyword": "strong",
+        "weight": 0.509
+      },
+      {
+        "keyword": "mentorship",
+        "weight": 0.509
+      },
+      {
+        "keyword": "computer",
+        "weight": 0.507
+      },
+      {
+        "keyword": "letter recommendation",
+        "weight": 0.505
+      },
+      {
+        "keyword": "recommendation",
+        "weight": 0.505
+      },
+      {
+        "keyword": "real",
+        "weight": 0.504
+      },
+      {
+        "keyword": "git",
+        "weight": 0.502
+      },
+      {
+        "keyword": "computer science",
+        "weight": 0.499
+      },
+      {
+        "keyword": "written",
+        "weight": 0.496
+      },
+      {
+        "keyword": "sprints",
+        "weight": 0.496
+      },
+      {
+        "keyword": "written communication",
+        "weight": 0.496
+      },
+      {
+        "keyword": "communication",
+        "weight": 0.496
+      }
+    ]
+  }
+}

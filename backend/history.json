@@ -1,0 +1,142 @@
+[
+  {
+    "id": "62bb6e61-784e-473d-8424-87d2d6861bd4",
+    "created_at": "2026-11-12 14:40:11",
+    "title": "# SAMPLE \u2014 NOT AN OFFICIAL MICROSOFT DOC...",
+    "company": "Not Specified",
+    "prediction": "Real (With Caution)",
+    "risk_score": 42,
+    "risk_level": "Medium Risk",
+    "model_used": "Logistic Regression"
+  },
+  {
+    "id": "20234a77-5a08-4785-a08c-72a46da5bfaf",
+    "created_at": "2026-11-12 14:39:38",
+    "title": "# SAMPLE \u2014 NOT AN OFFICIAL MICROSOFT DOC...",
+    "company": "Not Specified",
+    "prediction": "Real (With Caution)",
+    "risk_score": 42,
+    "risk_level": "Medium Risk",
+    "model_used": "Logistic Regression"
+  },
+  {
+    "id": "19c5723b-faae-4a0e-87ca-20b530e8422c",
+    "created_at": "2026-11-12 14:38:48",
+    "title": "# SAMPLE \u2014 NOT AN OFFICIAL MICROSOFT DOC...",
+    "company": "Not Specified",
+    "prediction": "Real (With Caution)",
+    "risk_score": 42,
+    "risk_level": "Medium Risk",
+    "model_used": "Logistic Regression"
+  },
+  {
+    "id": "2aca15a8-cec0-4601-8091-e0047ea9ae12",
+    "created_at": "2026-11-12 14:38:23",
+    "title": "# SAMPLE \u2014 NOT AN OFFICIAL MICROSOFT DOC...",
+    "company": "Not Specified",
+    "prediction": "Real (With Caution)",
+    "risk_score": 42,
+    "risk_level": "Medium Risk",
+    "model_used": "Logistic Regression"
+  },
+  {
+    "id": "a92c5e74-7553-4b4c-b03e-2f8ed31fcebb",
+    "created_at": "2026-11-12 14:37:56",
+    "title": "# SAMPLE \u2014 NOT AN OFFICIAL MICROSOFT DOC...",
+    "company": "Not Specified",
+    "prediction": "Fake",
+    "risk_score": 82,
+    "risk_level": "High Risk",
+    "model_used": "Logistic Regression"
+  },
+  {
+    "id": "c510d722-88cb-4255-a27a-57217f17a2aa",
+    "created_at": "2026-11-12 14:35:01",
+    "title": "WEB DEVELOPER",
+    "company": "GOOGLE",
+    "prediction": "Fake",
+    "risk_score": 82,
+    "risk_level": "High Risk",
+    "model_used": "Logistic Regression"
+  },
+  {
+    "id": "40414b81-bfce-4036-9d6f-e50065422419",
+    "created_at": "2026-11-12 14:34:37",
+    "title": "WEB DEVELOPER",
+    "company": "GOOGLE",
+    "prediction": "Fake",
+    "risk_score": 82,
+    "risk_level": "High Risk",
+    "model_used": "Logistic Regression"
+  },
+  {
+    "id": "b10be610-7824-4b1a-8c74-ccedf5abaee4",
+    "created_at": "2026-11-12 14:34:00",
+    "title": "WEB DEVELOPER",
+    "company": "GOOGLE",
+    "prediction": "Real (With Caution)",
+    "risk_score": 41,
+    "risk_level": "Medium Risk",
+    "model_used": "Logistic Regression"
+  },
+  {
+    "id": "5641945c-567e-4b3e-a3e8-93bfa43e5132",
+    "created_at": "2026-11-12 14:29:38",
+    "title": "C programming internship",
+    "company": "PINNACLE",
+    "prediction": "Real (With Caution)",
+    "risk_score": 41,
+    "risk_level": "Medium Risk",
+    "model_used": "Logistic Regression"
+  },
+  {
+    "id": "30d34537-a630-4e0d-a07a-dcbd742f8150",
+    "created_at": "2026-11-12 14:28:05",
+    "title": "C programming internship",
+    "company": "PINNACLE",
+    "prediction": "Real (With Caution)",
+    "risk_score": 49,
+    "risk_level": "Medium Risk",
+    "model_used": "Logistic Regression"
+  },
+  {
+    "id": "46e3340d-aa40-4c22-8c49-54e6b4e5021f",
+    "created_at": "2026-11-12 14:26:14",
+    "title": "C programming internship",
+    "company": "PINNACLE",
+    "prediction": "Fake",
+    "risk_score": 82,
+    "risk_level": "High Risk",
+    "model_used": "Logistic Regression"
+  },
+  {
+    "id": "2b7b1ab6-b35f-44d0-82a1-0752321b57e5",
+    "created_at": "2026-11-12 14:07:17",
+    "title": "Software Engineering Intern - Summer 2026",
+    "company": "TechCorp Solutions Inc.",
+    "prediction": "Real (With Caution)",
+    "risk_score": 34,
+    "risk_level": "Medium Risk",
+    "model_used": "Logistic Regression"
+  },
+  {
+    "id": "f05708bb-7295-4bdc-8201-4875060ac9e9",
+    "created_at": "2026-11-12 14:07:17",
+    "title": "Online Form Filling & Data Entry Intern",
+    "company": "Quick Earn Pvt Ltd",
+    "prediction": "Fake",
+    "risk_score": 87,
+    "risk_level": "High Risk",
+    "model_used": "Logistic Regression"
+  },
+  {
+    "id": "4718c0af-59f5-4235-839f-24af553f9bea",
+    "created_at": "2026-11-12 13:46:25",
+    "title": "Intern",
+    "company": "Acme",
+    "prediction": "Fake",
+    "risk_score": 82,
+    "risk_level": "High Risk",
+    "model_used": "Logistic Regression"
+  }
+]
