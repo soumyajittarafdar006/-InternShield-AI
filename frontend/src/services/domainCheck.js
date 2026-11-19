@@ -13,7 +13,7 @@ import TRUSTED_BRANDS from './trustedBrands.json';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
 
-const FREE_DOMAINS = [
+export const FREE_DOMAINS = [
   'gmail.com', 'googlemail.com', 'yahoo.com', 'yahoo.in', 'outlook.com', 'hotmail.com',
   'live.com', 'rediffmail.com', 'ymail.com', 'protonmail.com', 'proton.me', 'icloud.com', 'aol.com',
 ];

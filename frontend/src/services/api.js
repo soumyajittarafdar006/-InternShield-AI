@@ -5,7 +5,7 @@
 
 import { applyDomainIntel } from './domainCheck';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
 
 export async function checkBackendHealth() {
   try {
@@ -68,6 +68,7 @@ export async function getModelPerformance() {
   // Return pre-calculated verified benchmark metrics from model_metrics.json
   return {
     status: 'trained',
+    source: 'bundled_snapshot',
     primary_model: 'Logistic Regression',
     dataset_info: {
       total_samples: 470,
@@ -163,7 +164,7 @@ export async function fetchHistory() {
 /**
  * Client-side fallback analyzer adhering strictly to the same algorithm
  */
-function fallbackAnalyze(data) {
+export function fallbackAnalyze(data) {
   const text = `${data.title || ''} ${data.company || ''} ${data.description || ''} ${data.requirements || ''} ${data.stipend || ''} ${data.registration_fee || data.fee || ''} ${data.full_text || ''}`.toLowerCase();
   const fee = (data.registration_fee || data.fee || '').toString().toLowerCase();
   const email = (data.email || '').toLowerCase();
@@ -296,7 +297,7 @@ function fallbackAnalyze(data) {
     status_color,
     is_demo_mode: true,
     model_used: "Client Rule-Based Engine (Demo Mode)",
-    model_confidence: 88.5,
+    model_confidence: null,
     reasons: signals,
     safety_recommendations: [
       risk_level === 'High Risk' ? "DO NOT PROCEED: This posting exhibits critical fraud patterns. Report the listing to your college placement cell." : "Exercise standard caution before accepting.",
@@ -304,10 +305,7 @@ function fallbackAnalyze(data) {
       "Verify the company on official channels (LinkedIn company page, MCA/ROC company registry, or official website).",
       "Check recruiter's email domain: Legitimate corporate talent teams write from official @company.com domains, not free Gmail or Yahoo accounts."
     ],
-    top_keywords: [
-      { word: "registration fee", weight: 3.4, direction: "fake" },
-      { word: "guaranteed", weight: 2.1, direction: "fake" }
-    ],
+    top_keywords: [],
     metadata: {
       title: data.title || "Pasted Offer",
       company: data.company || "Not Specified",

@@ -1,45 +1,49 @@
 import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Search, Trash2, Sparkles, AlertCircle, FileText, Building, 
-  Mail, Globe, IndianRupee, Clock, CheckCircle2, ChevronRight,
-  ShieldCheck, Loader2, RefreshCw, Upload, X
-} from 'lucide-react';
+import { Search, Trash2, Upload, CheckCircle2, AlertCircle } from 'lucide-react';
 import { SAMPLE_OFFERS } from '../data/samples';
 import { analyzeInternship } from '../services/api';
 import { extractPdfText, parseOfferText } from '../services/pdfExtract';
+import { extractEmailDomain, FREE_DOMAINS } from '../services/domainCheck';
+import { formatMoney } from '../lib/risk';
 import ResultModal from '../components/ResultModal';
+import { Panel, PageHeader, DL, Notice, Spinner, Tag } from '../components/ui';
+
+const EMPTY_FORM = {
+  title: '',
+  company: '',
+  description: '',
+  requirements: '',
+  email: '',
+  website: '',
+  stipend: '',
+  registration_fee: '',
+  duration: '',
+  full_text: '',
+  model_name: 'Logistic Regression',
+};
+
+const plainName = (name) => name.replace(/^[^A-Za-z0-9]+/, '');
+
+function FormSection({ step, title, children }) {
+  return (
+    <div className="border-t border-stone-200 pt-5 first:border-t-0 first:pt-0">
+      <div className="mb-3.5 flex items-center gap-2">
+        <span className="font-mono text-xs font-semibold text-[#0F4C5C]">{step}</span>
+        <h3 className="text-sm font-bold text-stone-900">{title}</h3>
+      </div>
+      <div className="space-y-4">{children}</div>
+    </div>
+  );
+}
 
 export default function AnalyzePage({ onAnalysisComplete, onGoToDashboard }) {
-  const [formData, setFormData] = useState({
-    title: '',
-    company: '',
-    description: '',
-    requirements: '',
-    email: '',
-    website: '',
-    stipend: '',
-    registration_fee: '',
-    duration: '',
-    full_text: '',
-    model_name: 'Logistic Regression'
-  });
-
+  const [formData, setFormData] = useState(EMPTY_FORM);
   const [isLoading, setIsLoading] = useState(false);
-  const [loadingStep, setLoadingStep] = useState(0);
   const [validationError, setValidationError] = useState('');
-  const [activeTab, setActiveTab] = useState('form'); // 'form' | 'paste'
+  const [activeTab, setActiveTab] = useState('form');
   const [currentResult, setCurrentResult] = useState(null);
-  const [pdfState, setPdfState] = useState({ status: 'idle' }); // idle | reading | done | error
+  const [pdfState, setPdfState] = useState({ status: 'idle' });
   const [dragOver, setDragOver] = useState(false);
-
-  const loadingStages = [
-    "Pre-processing text & removing formatting noise...",
-    "Extracting n-gram vocabulary features via TF-IDF...",
-    "Scanning red flags: fees, free email domains & document harvesting...",
-    "Evaluating with trained Logistic Regression model...",
-    "Generating explainable risk score & recommendations..."
-  ];
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -48,31 +52,16 @@ export default function AnalyzePage({ onAnalysisComplete, onGoToDashboard }) {
   };
 
   const handleClear = () => {
-    setFormData({
-      title: '',
-      company: '',
-      description: '',
-      requirements: '',
-      email: '',
-      website: '',
-      stipend: '',
-      registration_fee: '',
-      duration: '',
-      full_text: '',
-      model_name: 'Logistic Regression'
-    });
+    setFormData(EMPTY_FORM);
     setValidationError('');
     setCurrentResult(null);
     setPdfState({ status: 'idle' });
   };
 
   const handleLoadSample = (sampleId) => {
-    const sample = SAMPLE_OFFERS.find(s => s.id === sampleId);
+    const sample = SAMPLE_OFFERS.find((s) => s.id === sampleId);
     if (sample) {
-      setFormData({
-        ...sample.data,
-        model_name: 'Logistic Regression'
-      });
+      setFormData({ ...sample.data, model_name: 'Logistic Regression' });
       setValidationError('');
       setCurrentResult(null);
     }
@@ -101,7 +90,7 @@ export default function AnalyzePage({ onAnalysisComplete, onGoToDashboard }) {
       setValidationError('');
       setCurrentResult(null);
       setPdfState({ status: 'done', name: file.name, pages, filled: Object.keys(parsed).filter((k) => k !== 'full_text').length });
-    } catch (err) {
+    } catch {
       setPdfState({ status: 'error', message: 'We could not read this PDF. It may be password-protected or damaged. You can paste the text instead.' });
     }
   };
@@ -109,491 +98,290 @@ export default function AnalyzePage({ onAnalysisComplete, onGoToDashboard }) {
   const handleSubmit = async (e) => {
     if (e) e.preventDefault();
 
-    // Validation: Require either title or description or pasted text
-    const hasEnoughData = 
+    const hasEnoughData =
       (formData.title.trim().length > 0 && formData.description.trim().length > 0) ||
       formData.full_text.trim().length > 20;
 
     if (!hasEnoughData) {
-      setValidationError('Please provide at least a Job Title & Description, or paste the internship offer letter into the Quick Paste tab.');
+      setValidationError('Please provide at least a job title and description, or paste the offer text on the "Paste offer text" tab.');
       return;
     }
 
     setValidationError('');
     setIsLoading(true);
-    setLoadingStep(0);
-
-    // Simulate realistic progressive pipeline steps
-    const stepInterval = setInterval(() => {
-      setLoadingStep(prev => (prev < loadingStages.length - 1 ? prev + 1 : prev));
-    }, 400);
-
     try {
       const result = await analyzeInternship(formData);
-      clearInterval(stepInterval);
-      setLoadingStep(loadingStages.length - 1);
-      
-      setTimeout(() => {
-        setIsLoading(false);
-        setCurrentResult(result);
-        if (onAnalysisComplete) {
-          onAnalysisComplete(result);
-        }
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-      }, 500);
-
+      setCurrentResult(result);
+      if (onAnalysisComplete) onAnalysisComplete(result);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) {
-      clearInterval(stepInterval);
+      setValidationError(err.message || 'An error occurred during analysis.');
+    } finally {
       setIsLoading(false);
-      setValidationError(err.message || 'An error occurred during internship analysis.');
     }
   };
 
   if (currentResult) {
-    return (
-      <ResultModal 
-        result={currentResult}
-        onReset={() => setCurrentResult(null)}
-        onGoToDashboard={onGoToDashboard}
-      />
-    );
+    return <ResultModal result={currentResult} onReset={() => setCurrentResult(null)} onGoToDashboard={onGoToDashboard} />;
   }
 
+  const emailDomain = extractEmailDomain(formData);
+  const domainType = !emailDomain ? '' : FREE_DOMAINS.includes(emailDomain) ? 'free public provider' : 'company domain';
+  const textChars = (formData.description + formData.requirements + formData.full_text).length;
+
   return (
-    <div className="max-w-6xl mx-auto px-4 py-8">
-      
-      {/* Page Title & Subtitle */}
-      <div className="text-center max-w-3xl mx-auto mb-8">
-        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-500/10 border border-blue-500/25 text-blue-400 text-xs font-semibold uppercase tracking-wider mb-3">
-          <Sparkles className="w-3.5 h-3.5" />
-          <span>AI Detection Pipeline</span>
-        </div>
-        <h1 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
-          Analyse Internship Offer
-        </h1>
-        <p className="text-sm sm:text-base text-slate-400 mt-2">
-          Submit the internship details or paste the offer letter. Our NLP engine will cross-examine linguistic features, registration fee demands, and recruiter authenticity.
-        </p>
-      </div>
+    <div className="page space-y-6 py-8">
+      <PageHeader
+        eyebrow="Analyse"
+        title="Analyse an internship offer"
+        description="Upload a PDF, paste the message, or fill in the fields below."
+      />
 
-      {/* Upload a PDF offer letter */}
-      <div className="glass-panel rounded-2xl p-4 sm:p-5 mb-6">
-        <div className="flex items-start gap-3 mb-3">
-          <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/25 flex items-center justify-center text-blue-400 shrink-0">
-            <Upload className="w-5 h-5" />
-          </div>
-          <div>
-            <h3 className="text-base font-bold text-white">Got the offer as a PDF? Upload it</h3>
-            <p className="text-sm text-slate-400">
-              We read the text on your own device and fill the form for you. Check the details, then press Analyse. Your PDF is never sent to a server.
-            </p>
-          </div>
-        </div>
-        <label
-          onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-          onDragLeave={() => setDragOver(false)}
-          onDrop={(e) => { e.preventDefault(); setDragOver(false); handlePdf(e.dataTransfer.files[0]); }}
-          className={`flex flex-col items-center justify-center gap-1 text-center px-4 py-6 rounded-xl border-2 border-dashed cursor-pointer transition-colors ${
-            dragOver ? 'border-blue-500 bg-blue-500/10' : 'border-slate-700 hover:border-blue-500/60 bg-slate-950/40'
-          }`}
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_21rem]">
+        <Panel
+          title="Offer details"
+          action={
+            <button
+              type="button"
+              onClick={handleClear}
+              className="inline-flex items-center gap-1.5 rounded px-2 py-1 text-xs font-medium text-stone-500 transition-colors hover:bg-red-50 hover:text-red-700"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Clear
+            </button>
+          }
+          bodyClassName="p-5 sm:p-6"
         >
-          <input
-            type="file"
-            accept="application/pdf,.pdf"
-            className="sr-only"
-            onChange={(e) => { handlePdf(e.target.files[0]); e.target.value = ''; }}
-          />
-          {pdfState.status === 'reading' ? (
-            <span className="flex items-center gap-2 text-sm font-semibold text-slate-200">
-              <Loader2 className="w-4 h-4 animate-spin" /> Reading {pdfState.name}...
-            </span>
-          ) : (
-            <>
-              <span className="text-sm font-semibold text-slate-200">Click to choose a PDF, or drag it here</span>
-              <span className="text-xs text-slate-400">PDF only, up to 10 MB</span>
-            </>
-          )}
-        </label>
-        {pdfState.status === 'done' && (
-          <div className="mt-3 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-sm flex items-start gap-2">
-            <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
-            <span>
-              Read <strong>{pdfState.name}</strong> ({pdfState.pages} {pdfState.pages === 1 ? 'page' : 'pages'}) and filled {pdfState.filled} fields. Please check them below before you analyse.
-            </span>
-          </div>
-        )}
-        {pdfState.status === 'error' && (
-          <div className="mt-3 p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm flex items-start gap-2">
-            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-            <span>{pdfState.message}</span>
-          </div>
-        )}
-      </div>
-
-      {/* Sample Quick-Selector Pills */}
-      <div className="glass-panel rounded-2xl p-4 sm:p-5 mb-8">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-3">
-          <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-            <Sparkles className="w-4 h-4 text-blue-400" />
-            Quick Test Samples (Click to Pre-fill):
-          </span>
-          <span className="text-[11px] text-slate-400">
-            Realistic test cases based on actual recruitment fraud reports
-          </span>
-        </div>
-        <div className="flex flex-wrap gap-2.5">
-          {SAMPLE_OFFERS.map((sample) => (
-            <button
-              key={sample.id}
-              type="button"
-              onClick={() => handleLoadSample(sample.id)}
-              className="text-xs px-3.5 py-2 rounded-xl bg-slate-900/80 hover:bg-slate-800 text-slate-200 border border-slate-700/80 hover:border-blue-500/50 transition-all duration-150 cursor-pointer flex items-center gap-2 shadow-sm"
-            >
-              <span>{sample.name}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Main Analysis Form Container */}
-      <div className="glass-panel rounded-2xl p-6 sm:p-8 relative">
-
-        {/* Tab Toggle: Form Fields vs Paste Raw Text */}
-        <div className="flex items-center justify-between border-b border-slate-800 pb-4 mb-6">
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setActiveTab('form')}
-              className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all cursor-pointer ${
-                activeTab === 'form'
-                  ? 'bg-blue-600 text-white shadow-md shadow-blue-500/25'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
-              }`}
-            >
-              Structured Form
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab('paste')}
-              className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all cursor-pointer ${
-                activeTab === 'paste'
-                  ? 'bg-blue-600 text-white shadow-md shadow-blue-500/25'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
-              }`}
-            >
-              Paste Full Offer Text
-            </button>
-          </div>
-
-          <button
-            type="button"
-            onClick={handleClear}
-            className="text-xs text-slate-400 hover:text-red-400 flex items-center gap-1.5 transition-colors cursor-pointer py-1 px-2.5 rounded hover:bg-slate-800"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-            <span>Clear Form</span>
-          </button>
-        </div>
-
-        {/* Validation Error Banner */}
-        {validationError && (
-          <div className="mb-6 p-4 rounded-xl bg-red-950/40 border border-red-500/40 text-red-300 text-sm flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+          <div className="space-y-6">
+            {/* PDF upload */}
             <div>
-              <strong className="font-semibold">Incomplete Details:</strong> {validationError}
-            </div>
-          </div>
-        )}
-
-        {/* Form Body */}
-        <form onSubmit={handleSubmit} className="space-y-6">
-
-          {activeTab === 'form' ? (
-            <>
-              {/* Row 1: Title & Company */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
-                    Internship Title <span className="text-red-400">*</span>
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      name="title"
-                      value={formData.title}
-                      onChange={handleInputChange}
-                      placeholder="e.g. Software Engineering Intern / Data Entry"
-                      className="glass-input w-full px-4 py-3 rounded-xl text-sm placeholder:text-slate-500"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
-                    Company / Organization Name
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      name="company"
-                      value={formData.company}
-                      onChange={handleInputChange}
-                      placeholder="e.g. TechCorp Solutions / Global Recruiters"
-                      className="glass-input w-full px-4 py-3 rounded-xl text-sm placeholder:text-slate-500"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Row 2: Description */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
-                  Internship Description / Role Overview <span className="text-red-400">*</span>
-                </label>
-                <textarea
-                  name="description"
-                  rows={4}
-                  value={formData.description}
-                  onChange={handleInputChange}
-                  placeholder="Provide role description, responsibilities, work hours, or daily tasks..."
-                  className="glass-input w-full px-4 py-3 rounded-xl text-sm placeholder:text-slate-500 resize-y"
+              <label
+                onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={(e) => { e.preventDefault(); setDragOver(false); handlePdf(e.dataTransfer.files[0]); }}
+                className={`flex cursor-pointer items-center gap-3.5 rounded-md border border-dashed px-4 py-3.5 transition-colors ${
+                  dragOver
+                    ? 'border-[#0F4C5C] bg-teal-50/50'
+                    : 'border-stone-300 bg-[#FAF9F6] hover:border-[#0F4C5C]'
+                }`}
+              >
+                <input
+                  type="file"
+                  accept="application/pdf,.pdf"
+                  className="sr-only"
+                  onChange={(e) => { handlePdf(e.target.files[0]); e.target.value = ''; }}
                 />
-              </div>
-
-              {/* Row 3: Requirements & Duration */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                <div className="md:col-span-2">
-                  <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
-                    Job Requirements / Eligibility
-                  </label>
-                  <input
-                    type="text"
-                    name="requirements"
-                    value={formData.requirements}
-                    onChange={handleInputChange}
-                    placeholder="e.g. CS degree, Python skills, or 'No technical skills required'"
-                    className="glass-input w-full px-4 py-3 rounded-xl text-sm placeholder:text-slate-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
-                    Internship Duration
-                  </label>
-                  <input
-                    type="text"
-                    name="duration"
-                    value={formData.duration}
-                    onChange={handleInputChange}
-                    placeholder="e.g. 3 Months / Immediate"
-                    className="glass-input w-full px-4 py-3 rounded-xl text-sm placeholder:text-slate-500"
-                  />
-                </div>
-              </div>
-
-              {/* Row 4: Recruiter Email & Company Website */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2 flex items-center justify-between">
-                    <span>Recruiter Contact Email</span>
-                    <span className="text-[10px] text-slate-400 font-normal">Checks domain authenticity</span>
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      name="email"
-                      value={formData.email}
-                      onChange={handleInputChange}
-                      placeholder="e.g. hr@company.com or candidate@gmail.com"
-                      className="glass-input w-full px-4 py-3 rounded-xl text-sm placeholder:text-slate-500"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
-                    Company Website (Optional)
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      name="website"
-                      value={formData.website}
-                      onChange={handleInputChange}
-                      placeholder="e.g. https://company.com"
-                      className="glass-input w-full px-4 py-3 rounded-xl text-sm placeholder:text-slate-500"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Row 5: Offered Stipend & Registration / Training Fee */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5 p-4 rounded-xl bg-slate-900/60 border border-slate-800">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
-                    Offered Stipend Amount
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      name="stipend"
-                      value={formData.stipend}
-                      onChange={handleInputChange}
-                      placeholder="e.g. ₹25,000 / month or $3,000"
-                      className="glass-input w-full px-4 py-3 rounded-xl text-sm placeholder:text-slate-500"
-                    />
-                  </div>
-                  <span className="text-[11px] text-slate-400 mt-1 block">
-                    Unrealistically high stipends for low effort are a major scam indicator.
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded border border-stone-200 bg-white text-[#0F4C5C]">
+                  {pdfState.status === 'reading' ? <Spinner /> : <Upload className="h-4 w-4" aria-hidden="true" />}
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-sm font-semibold text-stone-900">
+                    {pdfState.status === 'reading' ? `Reading ${pdfState.name}…` : 'Upload offer letter (PDF)'}
                   </span>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-amber-300 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                    <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
-                    <span>Registration / Training Fee Demanded</span>
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      name="registration_fee"
-                      value={formData.registration_fee}
-                      onChange={handleInputChange}
-                      placeholder="e.g. ₹0 (Free) or ₹1,500 security deposit"
-                      className="glass-input w-full px-4 py-3 rounded-xl text-sm placeholder:text-slate-500 border-amber-500/30 focus:border-amber-400"
-                    />
-                  </div>
-                  <span className="text-[11px] text-amber-300/80 mt-1 block">
-                    Genuine employers NEVER charge interns. Any upfront fee is a critical red flag.
+                  <span className="block text-xs text-stone-500">
+                    Click or drop a file here. Parsed locally in your browser (up to 10 MB).
                   </span>
-                </div>
-              </div>
+                </span>
+              </label>
 
-              {/* Optional: Model Algorithm Selector */}
-              <div className="flex items-center justify-between text-xs text-slate-400 pt-2">
-                <span>Machine Learning Model:</span>
-                <select
-                  name="model_name"
-                  value={formData.model_name}
-                  onChange={handleInputChange}
-                  className="bg-slate-900 border border-slate-700 text-slate-300 rounded-lg px-2.5 py-1 text-xs focus:outline-none focus:border-blue-500"
+              {pdfState.status === 'done' && (
+                <Notice tone="verified" icon={CheckCircle2} className="mt-3">
+                  Read <strong>{pdfState.name}</strong> ({pdfState.pages} {pdfState.pages === 1 ? 'page' : 'pages'}) and filled {pdfState.filled} fields.
+                </Notice>
+              )}
+              {pdfState.status === 'error' && (
+                <Notice tone="danger" icon={AlertCircle} className="mt-3">
+                  {pdfState.message}
+                </Notice>
+              )}
+            </div>
+
+            {/* Samples */}
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-mono text-[11px] uppercase tracking-wider text-stone-400">Load sample:</span>
+              {SAMPLE_OFFERS.map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => handleLoadSample(s.id)}
+                  className="rounded border border-stone-300 bg-white px-2.5 py-1 text-xs font-medium text-stone-700 transition-colors hover:border-[#0F4C5C] hover:text-[#0F4C5C]"
                 >
-                  <option value="Logistic Regression">Logistic Regression (Primary Default)</option>
-                  <option value="Naive Bayes">Multinomial Naive Bayes</option>
-                  <option value="Random Forest">Random Forest Classifier</option>
-                  <option value="Support Vector Machine">Support Vector Machine (LinearSVC)</option>
-                </select>
-              </div>
-            </>
-          ) : (
-            /* Quick Paste Tab */
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
-                  Paste Full Internship Offer, WhatsApp Message, or Email Notice
-                </label>
-                <textarea
-                  name="full_text"
-                  rows={10}
-                  value={formData.full_text}
-                  onChange={handleInputChange}
-                  placeholder="Paste the full recruitment text here... e.g. 'URGENT HIRING!! Earn Rs 45,000 working from home... Pay registration fee Rs 999 to start...'"
-                  className="glass-input w-full px-4 py-3 rounded-xl text-sm placeholder:text-slate-500 font-mono text-xs resize-y"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">
-                    Recruiter Email (if mentioned)
-                  </label>
-                  <input
-                    type="text"
-                    name="email"
-                    value={formData.email}
-                    onChange={handleInputChange}
-                    placeholder="e.g. hr@company.com"
-                    className="glass-input w-full px-3 py-2 rounded-lg text-xs"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">
-                    Registration Fee Mentioned
-                  </label>
-                  <input
-                    type="text"
-                    name="registration_fee"
-                    value={formData.registration_fee}
-                    onChange={handleInputChange}
-                    placeholder="e.g. 0 or 1500"
-                    className="glass-input w-full px-3 py-2 rounded-lg text-xs"
-                  />
-                </div>
-              </div>
+                  {plainName(s.name)}
+                </button>
+              ))}
             </div>
-          )}
 
-          {/* Action Button */}
-          <div className="pt-4">
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="w-full py-4 rounded-xl font-bold text-white bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-500 hover:via-indigo-500 hover:to-purple-500 shadow-xl shadow-blue-600/30 hover:shadow-blue-600/50 hover:-translate-y-0.5 transition-all duration-200 cursor-pointer flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed text-base"
-            >
-              {isLoading ? (
+            {/* Mode switch */}
+            <div className="inline-flex rounded-md border border-stone-200 bg-stone-100 p-0.5" role="group" aria-label="Input mode">
+              {[
+                ['form', 'Structured form'],
+                ['paste', 'Paste offer text'],
+              ].map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  aria-pressed={activeTab === id}
+                  onClick={() => setActiveTab(id)}
+                  className={`rounded px-3.5 py-1 text-xs font-semibold transition-colors ${
+                    activeTab === id ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-600 hover:text-stone-900'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {validationError && (
+              <Notice tone="danger" icon={AlertCircle}>
+                {validationError}
+              </Notice>
+            )}
+
+            <form onSubmit={handleSubmit} className="space-y-5">
+              {activeTab === 'form' ? (
                 <>
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  <span>Analyzing With AI Engine...</span>
+                  <FormSection step="01" title="Role details">
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div>
+                        <label className="label" htmlFor="title">Internship title <span className="text-red-600">*</span></label>
+                        <input id="title" className="field bg-white" type="text" name="title" value={formData.title} onChange={handleInputChange} placeholder="Software Engineering Intern" />
+                      </div>
+                      <div>
+                        <label className="label" htmlFor="company">Company name</label>
+                        <input id="company" className="field bg-white" type="text" name="company" value={formData.company} onChange={handleInputChange} placeholder="As written in the offer" />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="label" htmlFor="description">Description <span className="text-red-600">*</span></label>
+                      <textarea id="description" className="field resize-y bg-white" name="description" rows={4} value={formData.description} onChange={handleInputChange} placeholder="Responsibilities, work hours, daily tasks…" />
+                    </div>
+                    <div className="grid gap-4 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+                      <div>
+                        <label className="label" htmlFor="requirements">Requirements</label>
+                        <input id="requirements" className="field bg-white" type="text" name="requirements" value={formData.requirements} onChange={handleInputChange} placeholder="Degree, skills, eligibility" />
+                      </div>
+                      <div>
+                        <label className="label" htmlFor="duration">Duration</label>
+                        <input id="duration" className="field bg-white" type="text" name="duration" value={formData.duration} onChange={handleInputChange} placeholder="3 months" />
+                      </div>
+                    </div>
+                  </FormSection>
+
+                  <FormSection step="02" title="Recruiter contact">
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div>
+                        <label className="label" htmlFor="email">Recruiter email</label>
+                        <input id="email" className="field bg-white font-mono text-xs" type="text" name="email" value={formData.email} onChange={handleInputChange} placeholder="hr@company.com" />
+                        <p className="hint">Checked for DNS, domain age, and brand lookalikes.</p>
+                      </div>
+                      <div>
+                        <label className="label" htmlFor="website">Company website</label>
+                        <input id="website" className="field bg-white font-mono text-xs" type="text" name="website" value={formData.website} onChange={handleInputChange} placeholder="https://company.com" />
+                        <p className="hint">Optional. Compared with the email domain.</p>
+                      </div>
+                    </div>
+                  </FormSection>
+
+                  <FormSection step="03" title="Compensation & fees">
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div>
+                        <label className="label" htmlFor="stipend">Stipend offered</label>
+                        <input id="stipend" className="field bg-white" type="text" name="stipend" value={formData.stipend} onChange={handleInputChange} placeholder="₹25,000 per month" />
+                      </div>
+                      <div>
+                        <label className="label" htmlFor="registration_fee">Fee or deposit requested</label>
+                        <input id="registration_fee" className="field bg-white" type="text" name="registration_fee" value={formData.registration_fee} onChange={handleInputChange} placeholder="0, or amount requested" />
+                        <p className="hint text-red-700">Genuine internships never charge applicants.</p>
+                      </div>
+                    </div>
+                  </FormSection>
+
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-t border-stone-200 pt-4">
+                    <label className="text-xs font-medium text-stone-500" htmlFor="model_name">Classifier (when server is online)</label>
+                    <select id="model_name" name="model_name" value={formData.model_name} onChange={handleInputChange} className="field w-auto bg-white py-1.5 text-xs">
+                      <option value="Logistic Regression">Logistic Regression (default)</option>
+                      <option value="Naive Bayes">Multinomial Naive Bayes</option>
+                      <option value="Random Forest">Random Forest</option>
+                      <option value="Support Vector Machine">Support Vector Machine (LinearSVC)</option>
+                    </select>
+                  </div>
                 </>
               ) : (
-                <>
-                  <Search className="w-5 h-5" />
-                  <span>Analyse Internship with AI Shield</span>
-                </>
-              )}
-            </button>
-          </div>
-
-        </form>
-
-        {/* Loading Overlay Animation */}
-        <AnimatePresence>
-          {isLoading && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="absolute inset-0 bg-[#080D1A]/95 backdrop-blur-md rounded-2xl flex flex-col items-center justify-center p-6 z-20"
-            >
-              <div className="relative mb-6">
-                <div className="w-20 h-20 rounded-full border-4 border-blue-500/20 border-t-blue-500 animate-spin" />
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <ShieldCheck className="w-8 h-8 text-blue-400 animate-pulse" />
+                <div className="space-y-4">
+                  <div>
+                    <label className="label" htmlFor="full_text">Offer text, WhatsApp message, or email</label>
+                    <textarea
+                      id="full_text"
+                      className="field resize-y bg-white font-mono text-xs"
+                      name="full_text"
+                      rows={10}
+                      value={formData.full_text}
+                      onChange={handleInputChange}
+                      placeholder="Paste the full message exactly as you received it."
+                    />
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div>
+                      <label className="label" htmlFor="paste_email">Recruiter email (if shown)</label>
+                      <input id="paste_email" className="field bg-white font-mono text-xs" type="text" name="email" value={formData.email} onChange={handleInputChange} placeholder="hr@company.com" />
+                    </div>
+                    <div>
+                      <label className="label" htmlFor="paste_fee">Fee mentioned</label>
+                      <input id="paste_fee" className="field bg-white" type="text" name="registration_fee" value={formData.registration_fee} onChange={handleInputChange} placeholder="0, or the amount" />
+                    </div>
+                  </div>
                 </div>
+              )}
+
+              <div className="flex flex-col gap-3 border-t border-stone-200 pt-5 sm:flex-row sm:items-center sm:justify-between">
+                <p className="max-w-md text-xs leading-5 text-stone-500" aria-live="polite">
+                  {isLoading
+                    ? 'Running checks. Live domain lookups can take up to 10 seconds.'
+                    : 'Sent to the analysis server, or evaluated locally in your browser if offline.'}
+                </p>
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-[#0F4C5C] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#0B3A47] disabled:opacity-60 sm:w-auto"
+                >
+                  {isLoading ? <Spinner className="h-4 w-4" /> : <Search className="h-4 w-4" />}
+                  {isLoading ? 'Analysing…' : 'Analyse offer'}
+                </button>
               </div>
+            </form>
+          </div>
+        </Panel>
 
-              <h3 className="text-xl font-bold text-white mb-2 tracking-tight">
-                AI NLP Inspection in Progress
-              </h3>
-
-              <div className="w-full max-w-md bg-slate-900 rounded-full h-2 overflow-hidden mb-4 border border-slate-800">
-                <motion.div
-                  className="h-full bg-gradient-to-r from-blue-500 to-purple-500"
-                  initial={{ width: "10%" }}
-                  animate={{ width: `${((loadingStep + 1) / loadingStages.length) * 100}%` }}
-                  transition={{ duration: 0.3 }}
-                />
+        <aside className="space-y-6 lg:sticky lg:top-20">
+          <Panel title="Offer preview" description="Summary of fields to be checked.">
+            <DL
+              items={[
+                { label: 'Role', value: formData.title },
+                { label: 'Company', value: formData.company },
+                { label: 'Email', value: formData.email, mono: true },
+                { label: 'Stipend', value: formatMoney(formData.stipend), mono: true },
+                { label: 'Fee requested', value: formatMoney(formData.registration_fee), mono: true },
+                { label: 'Text length', value: `${textChars.toLocaleString('en-IN')} chars`, mono: true },
+              ]}
+            />
+            {emailDomain && (
+              <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-stone-200 pt-3 text-xs">
+                <span className="text-stone-500">Domain</span>
+                <span className="font-mono text-stone-800">{emailDomain}</span>
+                <Tag tone={domainType === 'company domain' ? 'neutral' : 'caution'}>{domainType}</Tag>
               </div>
+            )}
+          </Panel>
 
-              <p className="text-xs text-blue-300 font-mono h-6 text-center animate-pulse">
-                {loadingStages[loadingStep]}
-              </p>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
+          <Panel title="Checks performed">
+            <ol className="space-y-2.5 text-xs leading-5 text-stone-600">
+              <li className="flex gap-2.5"><span className="font-mono font-semibold text-[#0F4C5C]">01</span>Text classifier scores the offer wording.</li>
+              <li className="flex gap-2.5"><span className="font-mono font-semibold text-red-700">02</span>Rules flag fees, free mailboxes, ID requests, and urgency.</li>
+              <li className="flex gap-2.5"><span className="font-mono font-semibold text-teal-700">03</span>Email domain is checked for DNS, age, and lookalikes.</li>
+            </ol>
+          </Panel>
+        </aside>
       </div>
-
     </div>
   );
 }

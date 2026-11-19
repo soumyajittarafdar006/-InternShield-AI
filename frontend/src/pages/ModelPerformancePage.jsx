@@ -1,453 +1,259 @@
 import React, { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { 
-  BarChart2, Cpu, CheckCircle2, AlertTriangle, ShieldCheck, 
-  Layers, Database, RefreshCw, Sparkles, HelpCircle, ArrowRight
-} from 'lucide-react';
-import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, 
-  Legend, ResponsiveContainer 
-} from 'recharts';
-import { getModelPerformance } from '../services/api';
+import { RefreshCw, AlertTriangle } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { getModelPerformance, API_BASE_URL } from '../services/api';
+import { pct } from '../lib/risk';
+import { Panel, PageHeader, Notice, Spinner, Tag } from '../components/ui';
+
+const fmt = (v) => (typeof v === 'number' ? `${v.toFixed(2)}%` : '—');
+const num = (v) => (typeof v === 'number' ? v : '—');
+const TICK = { fill: '#64748B', fontSize: 11, fontFamily: 'IBM Plex Mono' };
 
 export default function ModelPerformancePage() {
   const [metricsData, setMetricsData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedModel, setSelectedModel] = useState("Logistic Regression");
+  const [selectedModel, setSelectedModel] = useState('Logistic Regression');
   const [isRetraining, setIsRetraining] = useState(false);
-
-  useEffect(() => {
-    fetchMetrics();
-  }, []);
+  const [retrainError, setRetrainError] = useState('');
 
   const fetchMetrics = async () => {
     setIsLoading(true);
     try {
-      const data = await getModelPerformance();
-      setMetricsData(data);
+      setMetricsData(await getModelPerformance());
     } catch (err) {
-      console.error("Error loading metrics:", err);
+      console.error('Error loading metrics:', err);
     } finally {
       setIsLoading(false);
     }
   };
 
+  useEffect(() => {
+    fetchMetrics();
+  }, []);
+
   const handleRetrain = async () => {
     setIsRetraining(true);
+    setRetrainError('');
     try {
-      const res = await fetch("http://localhost:5000/api/train", { method: "POST" });
-      if (res.ok) {
-        await fetchMetrics();
-      }
-    } catch (err) {
-      console.warn("Retrain call failed or offline:", err);
+      const res = await fetch(`${API_BASE_URL}/train`, { method: 'POST' });
+      if (!res.ok) throw new Error(`Server responded with ${res.status}`);
+      await fetchMetrics();
+    } catch {
+      setRetrainError('Could not reach the analysis server to re-run the evaluation. Start the Flask backend and try again.');
     } finally {
       setIsRetraining(false);
     }
   };
 
-  if (isLoading) {
+  if (isLoading && !metricsData) {
     return (
-      <div className="max-w-6xl mx-auto px-4 py-20 text-center">
-        <div className="w-12 h-12 rounded-full border-4 border-blue-500/20 border-t-blue-500 animate-spin mx-auto mb-4" />
-        <p className="text-sm text-slate-400">Loading benchmark performance metrics...</p>
+      <div className="page flex items-center gap-3 py-20 text-sm text-muted">
+        <Spinner className="h-4 w-4" />
+        Loading benchmark metrics…
       </div>
     );
   }
 
-  // Fallback if model is strictly not trained
   if (!metricsData || metricsData.status === 'not_trained') {
     return (
-      <div className="max-w-4xl mx-auto px-4 py-16 text-center">
-        <div className="glass-panel rounded-2xl p-10 border border-amber-500/30">
-          <AlertTriangle className="w-12 h-12 text-amber-400 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold text-white mb-2">Model Not Trained Yet</h2>
-          <p className="text-sm text-slate-400 max-w-lg mx-auto mb-6">
-            In accordance with project guidelines, machine learning metrics are never invented. 
-            Run the training pipeline script or click below to train on the EMSCAD benchmark dataset.
-          </p>
-          <button
-            onClick={handleRetrain}
-            disabled={isRetraining}
-            className="px-6 py-3 rounded-xl font-bold text-white bg-blue-600 hover:bg-blue-500 transition-all inline-flex items-center gap-2 cursor-pointer"
-          >
-            <RefreshCw className={`w-4 h-4 ${isRetraining ? 'animate-spin' : ''}`} />
-            <span>{isRetraining ? 'Training Models...' : 'Train Models on Benchmark'}</span>
-          </button>
-        </div>
+      <div className="page max-w-2xl space-y-4 py-16">
+        <Notice tone="caution" icon={AlertTriangle} title="No trained model found">
+          Metrics are never invented. Train the models on the benchmark dataset to see real results here.
+        </Notice>
+        {retrainError && <Notice tone="danger">{retrainError}</Notice>}
+        <button type="button" onClick={handleRetrain} disabled={isRetraining} className="btn btn-primary">
+          {isRetraining ? <Spinner /> : <RefreshCw className="h-4 w-4" />}
+          {isRetraining ? 'Training…' : 'Train models'}
+        </button>
       </div>
     );
   }
 
-  const { dataset_info, models, explainability } = metricsData;
+  const { dataset_info: ds = {}, models = {}, explainability } = metricsData;
+  const names = Object.keys(models);
+  const primary = metricsData.primary_model || 'Logistic Regression';
+  const isSnapshot = metricsData.source === 'bundled_snapshot';
+  const active = models[selectedModel];
+  const cm = active?.confusion_matrix || {};
+  const tn = cm.true_negative, fp = cm.false_positive, fn = cm.false_negative, tp = cm.true_positive;
+  const testSize = ds.test_size;
+  const fakeShare = pct(ds.fake_samples, ds.total_samples);
 
-  // Prepare comparison chart data across 4 models
-  const comparisonData = Object.keys(models || {}).map((modelName) => {
-    const m = models[modelName];
-    return {
-      name: modelName,
-      Accuracy: m.accuracy,
-      "Fake Recall": m.recall_fake,
-      "Fake F1": m.f1_fake,
-      "Fake Precision": m.precision_fake
-    };
-  });
-
-  const activeModelStats = models ? models[selectedModel] : null;
-  const cm = activeModelStats?.confusion_matrix || { true_negative: 0, false_positive: 0, false_negative: 0, true_positive: 0 };
+  const errorData = names.map((n) => ({
+    name: n,
+    'False positives': models[n].confusion_matrix?.false_positive ?? 0,
+    'False negatives': models[n].confusion_matrix?.false_negative ?? 0,
+  }));
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-10">
-      
-      {/* Page Title & Overview */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-6">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-              Machine Learning Benchmark & Performance
-            </h1>
-            <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-              Verified Metrics
-            </span>
-          </div>
-          <p className="text-xs sm:text-sm text-slate-400 mt-1 max-w-3xl">
-            Trained and tested on EMSCAD benchmark job postings using an 80:20 stratified train-test split.
-            Evaluating Fake-class recall, precision, F1-score, and confusion matrices across 4 algorithms.
-          </p>
-        </div>
+    <div className="page space-y-6 py-8">
+      <PageHeader
+        eyebrow="ML performance"
+        title="Model benchmark"
+        description={`Four classifiers trained on TF-IDF features and compared on a held-out test set${ds.split_ratio ? ` (${ds.split_ratio} split)` : ''}.`}
+        actions={
+          <button type="button" onClick={handleRetrain} disabled={isRetraining} className="btn btn-secondary">
+            {isRetraining ? <Spinner /> : <RefreshCw className="h-4 w-4" />}
+            {isRetraining ? 'Re-running…' : 'Re-run evaluation'}
+          </button>
+        }
+      />
 
-        <button
-          onClick={handleRetrain}
-          disabled={isRetraining}
-          className="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-all flex items-center gap-2 cursor-pointer self-start sm:self-auto"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${isRetraining ? 'animate-spin' : ''}`} />
-          <span>{isRetraining ? 'Retraining...' : 'Re-run Evaluation'}</span>
-        </button>
-      </div>
+      {isSnapshot && (
+        <Notice tone="caution" title="Showing the metrics snapshot bundled with the app">
+          The analysis server is unreachable, so these figures are not live. Start the backend and use Re-run evaluation to refresh them from the current model.
+        </Notice>
+      )}
+      {retrainError && <Notice tone="danger">{retrainError}</Notice>}
 
-      {/* DATASET BENCHMARK METADATA CARD */}
-      <div className="glass-panel rounded-2xl p-6 border border-blue-500/20">
-        <h3 className="text-sm font-bold text-white uppercase tracking-wider mb-4 flex items-center gap-2">
-          <Database className="w-4 h-4 text-blue-400" />
-          <span>Dataset Architecture & Stratified Split</span>
-        </h3>
-
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 text-center">
-          <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800">
-            <span className="text-[10px] text-slate-400 uppercase font-semibold">Total Dataset</span>
-            <div className="text-xl font-bold text-white mt-1">{dataset_info?.total_samples || 470}</div>
-            <span className="text-[10px] text-slate-500">Benchmark rows</span>
-          </div>
-
-          <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800">
-            <span className="text-[10px] text-emerald-400 uppercase font-semibold">Real Offers</span>
-            <div className="text-xl font-bold text-emerald-400 mt-1">{dataset_info?.real_samples || 260}</div>
-            <span className="text-[10px] text-slate-500">55.3% of corpus</span>
-          </div>
-
-          <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800">
-            <span className="text-[10px] text-red-400 uppercase font-semibold">Fake Offers</span>
-            <div className="text-xl font-bold text-red-400 mt-1">{dataset_info?.fake_samples || 210}</div>
-            <span className="text-[10px] text-slate-500">44.7% of corpus</span>
-          </div>
-
-          <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800">
-            <span className="text-[10px] text-blue-400 uppercase font-semibold">Train Set (80%)</span>
-            <div className="text-xl font-bold text-blue-400 mt-1">{dataset_info?.train_size || 376}</div>
-            <span className="text-[10px] text-slate-500">Training samples</span>
-          </div>
-
-          <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800">
-            <span className="text-[10px] text-purple-400 uppercase font-semibold">Test Set (20%)</span>
-            <div className="text-xl font-bold text-purple-400 mt-1">{dataset_info?.test_size || 94}</div>
-            <span className="text-[10px] text-slate-500">Unseen test holdout</span>
-          </div>
-
-          <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800">
-            <span className="text-[10px] text-indigo-400 uppercase font-semibold">TF-IDF Features</span>
-            <div className="text-xl font-bold text-indigo-400 mt-1">{dataset_info?.feature_count || 2023}</div>
-            <span className="text-[10px] text-slate-500">1-2 n-gram vocab</span>
-          </div>
-        </div>
-      </div>
-
-      {/* MULTI-MODEL COMPARISON CHART (Recharts) */}
-      <div className="glass-panel rounded-2xl p-6 border border-slate-800 space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <div>
-            <h3 className="text-base font-bold text-white flex items-center gap-2">
-              <BarChart2 className="w-5 h-5 text-blue-400" />
-              <span>Algorithm Comparison on Unseen Test Set (80:20 Split)</span>
-            </h3>
-            <p className="text-xs text-slate-400 mt-0.5">
-              Comparing Accuracy, Recall (Fake), Precision (Fake), and F1-Score across all 4 candidate models.
-            </p>
-          </div>
-
-          <div className="text-[11px] text-slate-400 bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-800">
-            Primary Algorithm: <strong className="text-blue-400">Logistic Regression</strong>
-          </div>
-        </div>
-
-        <div className="h-72 w-full pt-4">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={comparisonData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1E293B" />
-              <XAxis dataKey="name" stroke="#94A3B8" fontSize={12} />
-              <YAxis domain={[80, 100]} stroke="#94A3B8" fontSize={12} unit="%" />
-              <RechartsTooltip 
-                contentStyle={{ backgroundColor: '#0B132B', borderColor: '#1E293B', borderRadius: '8px', fontSize: '12px' }}
-                itemStyle={{ color: '#E2E8F0' }}
-                formatter={(value) => [`${value}%`]}
-              />
-              <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
-              <Bar dataKey="Accuracy" fill="#3B82F6" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="Fake Recall" fill="#10B981" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="Fake F1" fill="#8B5CF6" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="Fake Precision" fill="#F59E0B" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      {/* DETAILED INSPECTION FOR CHOSEN MODEL */}
-      <div className="space-y-6">
-        
-        {/* Model Selector Tabs */}
-        <div className="flex flex-wrap items-center gap-2 border-b border-slate-800 pb-3">
-          <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mr-2">
-            Inspect Specific Model:
-          </span>
-          {Object.keys(models || {}).map((mName) => (
-            <button
-              key={mName}
-              onClick={() => setSelectedModel(mName)}
-              className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                selectedModel === mName
-                  ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
-                  : 'bg-slate-900 text-slate-400 hover:text-white hover:bg-slate-800'
-              }`}
-            >
-              {mName} {mName === "Logistic Regression" && "(Primary)"}
-            </button>
+      {/* Dataset */}
+      <Panel title="Dataset and split" bodyClassName="">
+        <dl className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
+          {[
+            ['Total posts', num(ds.total_samples), ''],
+            ['Real', num(ds.real_samples), pct(ds.real_samples, ds.total_samples)],
+            ['Fake', num(ds.fake_samples), fakeShare],
+            ['Train', num(ds.train_size), pct(ds.train_size, ds.total_samples)],
+            ['Test', num(ds.test_size), pct(ds.test_size, ds.total_samples)],
+            ['TF-IDF features', num(ds.feature_count), '1–2 word n-grams'],
+          ].map(([label, value, note]) => (
+            <div key={label} className="border-b border-r border-line p-4 last:border-r-0 lg:border-b-0">
+              <dt className="text-xs font-semibold text-muted">{label}</dt>
+              <dd className="num mt-1 text-xl font-medium">{value}</dd>
+              <p className="font-mono text-[11px] text-muted">{note || ' '}</p>
+            </div>
           ))}
+        </dl>
+        <p className="border-t border-line px-5 py-3 text-xs leading-5 text-muted">
+          {typeof testSize === 'number' && testSize > 0 ? (
+            <>One misclassified post moves accuracy by about {(100 / testSize).toFixed(1)} points on a test set of {testSize}. A score of 100% on a set this small should be read with caution. </>
+          ) : null}
+          {fakeShare && <>This evaluation set is {fakeShare} fake, far higher than real-world job boards (the public EMSCAD corpus has 866 fraudulent postings among 17,880), so precision here will be higher than in everyday use.</>}
+        </p>
+      </Panel>
+
+      {/* Comparison */}
+      <Panel title="Algorithm comparison" description="Fake is the positive class. Select a model to inspect its confusion matrix." bodyClassName="">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[40rem] text-left text-sm">
+            <thead className="border-b border-line bg-canvas text-xs text-muted">
+              <tr>
+                <th className="px-5 py-2.5 font-semibold">Model</th>
+                <th className="px-3 py-2.5 text-right font-semibold">Accuracy</th>
+                <th className="px-3 py-2.5 text-right font-semibold">Precision</th>
+                <th className="px-3 py-2.5 text-right font-semibold">Recall</th>
+                <th className="px-3 py-2.5 text-right font-semibold">F1</th>
+                <th className="px-3 py-2.5 text-right font-semibold">False pos.</th>
+                <th className="px-5 py-2.5 text-right font-semibold">False neg.</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-line">
+              {names.map((n) => {
+                const m = models[n];
+                const sel = n === selectedModel;
+                return (
+                  <tr key={n} className={sel ? 'bg-canvas' : 'hover:bg-canvas'}>
+                    <td className="px-5 py-3">
+                      <button type="button" onClick={() => setSelectedModel(n)} aria-pressed={sel} className={`text-left font-semibold ${sel ? 'text-navy' : 'text-ink hover:text-navy'}`}>
+                        {n}
+                      </button>
+                      {n === primary && <span className="ml-2"><Tag tone="navy">Primary</Tag></span>}
+                    </td>
+                    <td className="num px-3 py-3 text-right">{fmt(m.accuracy)}</td>
+                    <td className="num px-3 py-3 text-right">{fmt(m.precision_fake)}</td>
+                    <td className="num px-3 py-3 text-right">{fmt(m.recall_fake)}</td>
+                    <td className="num px-3 py-3 text-right">{fmt(m.f1_fake)}</td>
+                    <td className="num px-3 py-3 text-right">{num(m.confusion_matrix?.false_positive)}</td>
+                    <td className="num px-5 py-3 text-right">{num(m.confusion_matrix?.false_negative)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
-
-        {/* 4 Key Metrics Cards */}
-        {activeModelStats && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-            
-            <div className="glass-panel rounded-2xl p-5 border border-blue-500/20">
-              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                Overall Accuracy
-              </span>
-              <div className="mt-2 flex items-baseline gap-1">
-                <span className="text-3xl font-extrabold text-blue-400 font-sans">
-                  {activeModelStats.accuracy}%
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-400 mt-2">
-                Correct predictions out of all 94 test posts.
-              </p>
-            </div>
-
-            <div className="glass-panel rounded-2xl p-5 border border-emerald-500/20">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-emerald-400 uppercase tracking-wider">
-                  Fake-Class Recall
-                </span>
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-bold">
-                  CRITICAL
-                </span>
-              </div>
-              <div className="mt-2 flex items-baseline gap-1">
-                <span className="text-3xl font-extrabold text-emerald-400 font-sans">
-                  {activeModelStats.recall_fake}%
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-400 mt-2">
-                Out of all truly fake offers, how many did we catch.
-              </p>
-            </div>
-
-            <div className="glass-panel rounded-2xl p-5 border border-amber-500/20">
-              <span className="text-xs font-semibold text-amber-400 uppercase tracking-wider">
-                Fake-Class Precision
-              </span>
-              <div className="mt-2 flex items-baseline gap-1">
-                <span className="text-3xl font-extrabold text-amber-400 font-sans">
-                  {activeModelStats.precision_fake}%
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-400 mt-2">
-                When model flags Fake, how often is it right.
-              </p>
-            </div>
-
-            <div className="glass-panel rounded-2xl p-5 border border-purple-500/20">
-              <span className="text-xs font-semibold text-purple-400 uppercase tracking-wider">
-                Fake F1-Score
-              </span>
-              <div className="mt-2 flex items-baseline gap-1">
-                <span className="text-3xl font-extrabold text-purple-400 font-sans">
-                  {activeModelStats.f1_fake}%
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-400 mt-2">
-                Harmonic mean balancing precision and recall.
-              </p>
-            </div>
-
+        <div className="border-t border-line p-5">
+          <p className="mb-3 text-xs font-semibold text-muted">Misclassified test posts by model</p>
+          <div className="h-56 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={errorData} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
+                <CartesianGrid vertical={false} stroke="#E2E8F0" />
+                <XAxis dataKey="name" tickLine={false} axisLine={{ stroke: '#E2E8F0' }} tick={TICK} />
+                <YAxis allowDecimals={false} tickLine={false} axisLine={false} tick={TICK} />
+                <Tooltip cursor={{ fill: '#F7F8FA' }} contentStyle={{ border: '1px solid #E2E8F0', borderRadius: 6, fontSize: 12, boxShadow: 'none' }} />
+                <Legend iconType="square" wrapperStyle={{ fontSize: 12 }} />
+                <Bar dataKey="False positives" fill="#D97706" maxBarSize={28} radius={[4, 4, 0, 0]} isAnimationActive={false} />
+                <Bar dataKey="False negatives" fill="#DC4444" maxBarSize={28} radius={[4, 4, 0, 0]} isAnimationActive={false} />
+              </BarChart>
+            </ResponsiveContainer>
           </div>
-        )}
-
-        {/* CONFUSION MATRIX & REASONING SECTION */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-          
-          {/* Left: Interactive Confusion Matrix Heat Table */}
-          <div className="lg:col-span-6 glass-panel rounded-2xl p-6 border border-slate-800">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-                Confusion Matrix: {selectedModel}
-              </h3>
-              <span className="text-xs text-slate-400">Total Test: 94</span>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-center border-collapse text-xs">
-                <thead>
-                  <tr>
-                    <th className="p-2 border border-slate-800 bg-slate-900/40 text-slate-400"></th>
-                    <th className="p-2 border border-slate-800 bg-slate-900/80 text-emerald-400 font-bold">
-                      Predicted Real (0)
-                    </th>
-                    <th className="p-2 border border-slate-800 bg-slate-900/80 text-red-400 font-bold">
-                      Predicted Fake (1)
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <th className="p-3 border border-slate-800 bg-slate-900/80 text-emerald-400 font-bold text-left">
-                      Actual Real (0)
-                    </th>
-                    <td className="p-4 border border-slate-800 bg-emerald-950/20 text-emerald-300 font-bold text-base">
-                      {cm.true_negative}
-                      <span className="block text-[10px] font-normal text-slate-400">
-                        True Negatives (TN)
-                      </span>
-                    </td>
-                    <td className="p-4 border border-slate-800 bg-amber-950/20 text-amber-300 font-bold text-base">
-                      {cm.false_positive}
-                      <span className="block text-[10px] font-normal text-slate-400">
-                        False Positive (FP - False Alarm)
-                      </span>
-                    </td>
-                  </tr>
-                  <tr>
-                    <th className="p-3 border border-slate-800 bg-slate-900/80 text-red-400 font-bold text-left">
-                      Actual Fake (1)
-                    </th>
-                    <td className="p-4 border border-slate-800 bg-rose-950/30 text-rose-300 font-bold text-base">
-                      {cm.false_negative}
-                      <span className="block text-[10px] font-normal text-slate-400">
-                        False Negatives (FN - Slipped)
-                      </span>
-                    </td>
-                    <td className="p-4 border border-slate-800 bg-emerald-950/20 text-emerald-300 font-bold text-base">
-                      {cm.true_positive}
-                      <span className="block text-[10px] font-normal text-slate-400">
-                        True Positives (TP - Caught)
-                      </span>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-
-            <p className="text-[11px] text-slate-400 mt-4 leading-relaxed">
-              <strong className="text-slate-300">Interpretation:</strong> The model successfully identified {cm.true_positive} out of {cm.true_positive + cm.false_negative} fraudulent test posts with {cm.false_negative === 0 ? "ZERO false negatives" : `${cm.false_negative} missed postings`}.
-            </p>
-          </div>
-
-          {/* Right: Academic Insight on Class Imbalance & Fake Recall */}
-          <div className="lg:col-span-6 glass-panel rounded-2xl p-6 border border-slate-800 space-y-4">
-            <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-purple-400" />
-              <span>Why Fake-Class Recall Matters Most</span>
-            </h3>
-
-            <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 text-xs text-slate-300 leading-relaxed space-y-3">
-              <p>
-                In employment fraud detection, accuracy alone is deceptive. In real-world job datasets, less than 5% of postings are typically fraudulent. A trivial baseline model that predicts "Real" for every single post would achieve 95% accuracy while failing 100% of students.
-              </p>
-              <p>
-                Therefore, our engineering evaluation prioritizes <strong className="text-emerald-400">Fake-Class Recall</strong>:
-              </p>
-              <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800 font-mono text-[11px] text-blue-300">
-                Recall = TP / (TP + FN) = Caught Scams / Total Actual Scams
-              </div>
-              <p>
-                A <strong className="text-amber-300">False Positive</strong> (marking a real offer as suspicious) merely causes a student to perform a quick 2-minute LinkedIn check.
-                However, a <strong className="text-red-400">False Negative</strong> (marking a fake offer as safe) can cost a student ₹5,000 in stolen fees or leak their Aadhaar and banking details.
-              </p>
-            </div>
-          </div>
-
         </div>
+      </Panel>
 
-      </div>
+      {/* Inspector */}
+      {active && (
+        <div className="grid items-start gap-6 lg:grid-cols-2">
+          <Panel title={`Confusion matrix: ${selectedModel}`} description={typeof testSize === 'number' ? `${testSize} test posts` : undefined} bodyClassName="p-5">
+            <table className="w-full border-collapse text-center text-sm">
+              <thead>
+                <tr>
+                  <th className="p-2" />
+                  <th className="border border-line bg-canvas p-2 text-xs font-semibold text-muted">Predicted real</th>
+                  <th className="border border-line bg-canvas p-2 text-xs font-semibold text-muted">Predicted fake</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <th className="border border-line bg-canvas p-3 text-left text-xs font-semibold text-muted">Actually real</th>
+                  <td className="border border-line bg-verified-soft p-4"><span className="num block text-xl text-verified-ink">{num(tn)}</span><span className="text-xs text-muted">True negative</span></td>
+                  <td className="border border-line bg-caution-soft p-4"><span className="num block text-xl text-caution-ink">{num(fp)}</span><span className="text-xs text-muted">False positive</span></td>
+                </tr>
+                <tr>
+                  <th className="border border-line bg-canvas p-3 text-left text-xs font-semibold text-muted">Actually fake</th>
+                  <td className="border border-line bg-danger-soft p-4"><span className="num block text-xl text-danger-ink">{num(fn)}</span><span className="text-xs text-muted">False negative</span></td>
+                  <td className="border border-line bg-verified-soft p-4"><span className="num block text-xl text-verified-ink">{num(tp)}</span><span className="text-xs text-muted">True positive</span></td>
+                </tr>
+              </tbody>
+            </table>
+            {[tn, fp, fn, tp].every((v) => typeof v === 'number') && (
+              <p className="mt-4 text-sm text-muted">
+                Caught {tp} of {tp + fn} fraudulent test posts and wrongly flagged {fp} of {tn + fp} genuine ones.
+              </p>
+            )}
+          </Panel>
 
-      {/* TOP TF-IDF LINGUISTIC SIGNALS */}
-      {explainability && (
-        <div className="glass-panel rounded-2xl p-6 border border-slate-800">
-          <h3 className="text-base font-bold text-white mb-2 flex items-center gap-2">
-            <Layers className="w-5 h-5 text-blue-400" />
-            <span>Top Linguistic Indicators (TF-IDF Feature Weights)</span>
-          </h3>
-          <p className="text-xs text-slate-400 mb-6">
-            Words with the highest model coefficients influencing classification decisions in Logistic Regression.
-          </p>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            
-            {/* Fake Indicators */}
-            <div className="p-4 rounded-xl bg-red-950/20 border border-red-500/30">
-              <h4 className="text-xs font-bold text-red-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                <AlertTriangle className="w-4 h-4" />
-                <span>Strongest Fake / Fraud Predictors (+Weight)</span>
-              </h4>
-              <div className="space-y-2">
-                {explainability.top_fake_signals?.slice(0, 8).map((sig, i) => (
-                  <div key={i} className="flex items-center justify-between text-xs py-1 border-b border-red-500/10 last:border-0">
-                    <span className="font-mono text-slate-200">"{sig.keyword}"</span>
-                    <span className="font-mono font-bold text-red-400">+{sig.weight}</span>
-                  </div>
-                ))}
-              </div>
+          <Panel title="Why recall on the fake class matters most">
+            <div className="space-y-3 text-sm text-muted">
+              <p>Accuracy alone can mislead when fraud is rare: a model that always answers "real" would score well on a typical job board while protecting no one.</p>
+              <p className="rounded-md border border-line bg-canvas px-3 py-2 font-mono text-xs text-ink">Recall = TP / (TP + FN) = scams caught / all actual scams</p>
+              <p>A false positive sends a student to double-check a genuine offer. A false negative lets a scam through. The second is the costlier mistake, so recall is read first and precision second.</p>
             </div>
-
-            {/* Real Indicators */}
-            <div className="p-4 rounded-xl bg-emerald-950/20 border border-emerald-500/30">
-              <h4 className="text-xs font-bold text-emerald-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                <ShieldCheck className="w-4 h-4" />
-                <span>Strongest Genuine / Real Predictors (-Weight)</span>
-              </h4>
-              <div className="space-y-2">
-                {explainability.top_real_signals?.slice(0, 8).map((sig, i) => (
-                  <div key={i} className="flex items-center justify-between text-xs py-1 border-b border-emerald-500/10 last:border-0">
-                    <span className="font-mono text-slate-200">"{sig.keyword}"</span>
-                    <span className="font-mono font-bold text-emerald-400">-{sig.weight}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-          </div>
+          </Panel>
         </div>
       )}
 
+      {/* Signals */}
+      {explainability && (
+        <Panel title="Strongest text signals" description={`Highest-weight terms in the ${primary} model (TF-IDF coefficients).`} bodyClassName="">
+          <div className="grid md:grid-cols-2 md:divide-x md:divide-line">
+            {[
+              ['Predict fake', explainability.top_fake_signals, '+', 'text-danger-ink'],
+              ['Predict real', explainability.top_real_signals, '−', 'text-verified-ink'],
+            ].map(([title, list, sign, color]) => (
+              <div key={title} className="p-5">
+                <h3 className="mb-2 text-xs font-semibold text-muted">{title}</h3>
+                <ul className="divide-y divide-line">
+                  {(list || []).slice(0, 8).map((s, i) => (
+                    <li key={i} className="flex items-center justify-between py-2 text-sm">
+                      <span className="font-mono text-[13px]">{s.keyword}</span>
+                      <span className={`num ${color}`}>{sign}{Math.abs(Number(s.weight)).toFixed(2)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        </Panel>
+      )}
     </div>
   );
 }

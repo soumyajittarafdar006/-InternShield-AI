@@ -1,5 +1,45 @@
 [
   {
+    "id": "6d5f8ffd-5756-4c97-a2c1-2312112e8c6f",
+    "created_at": "2026-11-19 10:57:32",
+    "title": "Digital Marketing Intern",
+    "company": "GlobalEdge Solutions Pvt Ltd",
+    "prediction": "Fake",
+    "risk_score": 82,
+    "risk_level": "High Risk",
+    "model_used": "Logistic Regression"
+  },
+  {
+    "id": "fe7dd35c-0539-4ddc-9d91-402c43e6b1b9",
+    "created_at": "2026-11-19 10:39:28",
+    "title": "Software Engineering Intern",
+    "company": "Infosys Limited",
+    "prediction": "Real (With Caution)",
+    "risk_score": 33,
+    "risk_level": "Medium Risk",
+    "model_used": "Logistic Regression"
+  },
+  {
+    "id": "0c5e98c8-feb2-4513-8a24-9a6b94028410",
+    "created_at": "2026-11-19 10:37:25",
+    "title": "Data Entry Intern",
+    "company": "TechPro Career Hub",
+    "prediction": "Fake",
+    "risk_score": 86,
+    "risk_level": "High Risk",
+    "model_used": "Random Forest"
+  },
+  {
+    "id": "f633472e-f82c-4bd2-8534-e8702ac27acb",
+    "created_at": "2026-11-19 10:15:53",
+    "title": "Data Analyst Internship - Selected Candidates",
+    "company": "Not Specified",
+    "prediction": "Real (With Caution)",
+    "risk_score": 35,
+    "risk_level": "Medium Risk",
+    "model_used": "Logistic Regression"
+  },
+  {
     "id": "f01f99f6-ad4c-4033-885f-bbdeaf470b10",
     "created_at": "2026-11-19 08:56:11",
     "title": "Data Analyst Internship - Selected Candidates",

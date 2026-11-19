@@ -8,6 +8,7 @@ import ModelPerformancePage from './pages/ModelPerformancePage';
 import ResultModal from './components/ResultModal';
 import { DEMO_HISTORY_SEED } from './data/samples';
 import { checkBackendHealth } from './services/api';
+import { isSampleRecord } from './lib/risk';
 
 const LOCAL_STORAGE_KEY = 'internshield_analysis_history_v1';
 
@@ -16,20 +17,17 @@ export default function App() {
   const [backendStatus, setBackendStatus] = useState(null);
   const [selectedHistoryResult, setSelectedHistoryResult] = useState(null);
 
-  // Initialize history from localStorage or seed
+  // History comes from localStorage; first-time visitors get clearly marked sample records.
   const [history, setHistory] = useState(() => {
     try {
       const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
-      if (saved) {
-        return JSON.parse(saved);
-      }
+      if (saved) return JSON.parse(saved);
     } catch (e) {
       console.warn('Failed reading history from localStorage:', e);
     }
-    return DEMO_HISTORY_SEED;
+    return DEMO_HISTORY_SEED.map((h) => ({ ...h, sample: true }));
   });
 
-  // Save history to localStorage whenever it changes
   useEffect(() => {
     try {
       localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(history));
@@ -38,24 +36,28 @@ export default function App() {
     }
   }, [history]);
 
-  // Check backend health on mount and every 30s
+  // Probe the analysis server on mount and every 30s
   useEffect(() => {
-    let isMounted = true;
+    let mounted = true;
     const probe = async () => {
       const status = await checkBackendHealth();
-      if (isMounted) setBackendStatus(status);
+      if (mounted) setBackendStatus(status);
     };
     probe();
     const interval = setInterval(probe, 30000);
     return () => {
-      isMounted = false;
+      mounted = false;
       clearInterval(interval);
     };
   }, []);
 
-  // When a new analysis finishes in AnalyzePage
+  const navigate = (tab) => {
+    setSelectedHistoryResult(null);
+    setActiveTab(tab);
+  };
+
   const handleAnalysisComplete = (result) => {
-    const newEntry = {
+    const entry = {
       id: result.analysis_id || 'scan-' + Date.now(),
       created_at: result.timestamp || new Date().toLocaleString(),
       title: result.metadata?.title || 'Internship Offer',
@@ -64,130 +66,83 @@ export default function App() {
       risk_score: result.risk_score,
       risk_level: result.risk_level,
       model_used: result.model_used,
-      full_result: result
+      full_result: result,
     };
-    setHistory(prev => [newEntry, ...prev.slice(0, 49)]);
+    setHistory((prev) => [entry, ...prev.slice(0, 49)]);
   };
 
   const handleClearHistory = () => {
-    if (window.confirm("Are you sure you want to clear your local analysis history?")) {
+    if (window.confirm('Clear your local analysis history? This cannot be undone.')) {
       setHistory([]);
       try {
         localStorage.removeItem(LOCAL_STORAGE_KEY);
-      } catch (e) {}
+      } catch {
+        /* storage unavailable */
+      }
     }
   };
 
   const handleSelectHistoryItem = (item) => {
-    // If we stored the full result, show it; else synthesize result modal
     if (item.full_result) {
       setSelectedHistoryResult(item.full_result);
-    } else {
-      setSelectedHistoryResult({
-        prediction: item.prediction,
-        risk_score: item.risk_score,
-        risk_level: item.risk_level,
-        model_used: item.model_used || "Logistic Regression (TF-IDF)",
-        model_confidence: 94.0,
-        metadata: {
-          title: item.title,
-          company: item.company,
-          recruiter_email: "Recorded in historical scan",
-          stipend: "See details",
-          registration_fee: item.risk_score > 60 ? "Flagged fee" : "None"
-        },
-        reasons: item.risk_score > 60 ? [
-          {
-            id: "historical_flag",
-            title: "Historical Scam Warning Signals",
-            severity: "CRITICAL",
-            explanation: "This posting contained high-risk linguistic patterns matching recruitment fee fraud.",
-            evidence: `Recorded risk score: ${item.risk_score}/100`
-          }
-        ] : [
-          {
-            id: "safe_flag",
-            title: "Verified Role Scope",
-            severity: "POSITIVE",
-            explanation: "Posting aligns with genuine corporate internship standards.",
-            evidence: "No upfront fees requested."
-          }
-        ],
-        safety_recommendations: [
-          "Never transfer money or pay upfront fees for internship onboarding.",
-          "Verify recruiter domain and check official company careers portal.",
-          "Do not share confidential bank passbooks or Aadhaar/PAN cards early."
-        ],
-        top_keywords: [
-          { word: "internship", weight: 2.1, direction: item.risk_score > 60 ? "fake" : "real" }
-        ],
-        timestamp: item.created_at
-      });
+      return;
     }
+    // Older and sample records only kept a summary. Show that summary and say so; never invent findings.
+    setSelectedHistoryResult({
+      summary_only: true,
+      is_sample: isSampleRecord(item),
+      prediction: item.prediction,
+      risk_score: item.risk_score,
+      risk_level: item.risk_level,
+      model_used: item.model_used,
+      model_confidence: null,
+      metadata: { title: item.title, company: item.company },
+      reasons: [],
+      safety_recommendations: [],
+      top_keywords: [],
+      timestamp: item.created_at,
+      analysis_id: item.id,
+    });
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#080D1A] text-slate-100 bg-grid-pattern selection:bg-blue-600 selection:text-white">
-      
-      {/* Top Sticky Navigation */}
-      <Navbar 
-        activeTab={activeTab} 
-        setActiveTab={(tab) => {
-          setSelectedHistoryResult(null);
-          setActiveTab(tab);
-        }}
-        backendStatus={backendStatus}
-      />
+    <div className="flex min-h-screen flex-col bg-canvas text-ink">
+      <Navbar activeTab={activeTab} setActiveTab={navigate} backendStatus={backendStatus} />
 
-      {/* Main Content Area */}
       <main className="flex-1">
         {selectedHistoryResult ? (
-          <ResultModal 
+          <ResultModal
             result={selectedHistoryResult}
-            onReset={() => {
-              setSelectedHistoryResult(null);
-              setActiveTab('analyze');
-            }}
-            onGoToDashboard={() => {
-              setSelectedHistoryResult(null);
-              setActiveTab('dashboard');
-            }}
+            onReset={() => navigate('analyze')}
+            onGoToDashboard={() => navigate('dashboard')}
           />
         ) : (
           <>
             {activeTab === 'home' && (
-              <LandingPage onNavigate={(tab) => {
-                setActiveTab(tab);
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-              }} />
-            )}
-
-            {activeTab === 'analyze' && (
-              <AnalyzePage 
-                onAnalysisComplete={handleAnalysisComplete}
-                onGoToDashboard={() => setActiveTab('dashboard')}
+              <LandingPage
+                onNavigate={(tab) => {
+                  navigate(tab);
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
               />
             )}
-
+            {activeTab === 'analyze' && (
+              <AnalyzePage onAnalysisComplete={handleAnalysisComplete} onGoToDashboard={() => navigate('dashboard')} />
+            )}
             {activeTab === 'dashboard' && (
-              <DashboardPage 
+              <DashboardPage
                 history={history}
                 onSelectHistoryItem={handleSelectHistoryItem}
-                onQuickAnalyze={() => setActiveTab('analyze')}
+                onQuickAnalyze={() => navigate('analyze')}
                 onClearHistory={handleClearHistory}
               />
             )}
-
-            {activeTab === 'ml-performance' && (
-              <ModelPerformancePage />
-            )}
+            {activeTab === 'ml-performance' && <ModelPerformancePage />}
           </>
         )}
       </main>
 
-      {/* Footer */}
-      <Footer setActiveTab={setActiveTab} />
-
+      <Footer setActiveTab={navigate} />
     </div>
   );
 }

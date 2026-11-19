@@ -2,16 +2,39 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%233B82F6' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'/%3E%3Cpath d='m9 12 2 2 4-4'/%3E%3C/svg%3E" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="InternShield AI: AI-powered platform that analyzes internship offers and detects suspicious recruitment activities to protect students from fraud." />
-    <meta name="theme-color" content="#080D1A" />
-    <title>InternShield AI – AI-Based Fake Internship Detection</title>
+    <meta name="description" content="InternShield analyses internship offers, flags suspicious recruitment practices and explains the evidence, so students can verify before sharing personal information." />
+    <meta name="theme-color" content="#0F4C5C" />
+    <title>InternShield – Internship offer analysis</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+      :root {
+        --font-sans: 'DM Sans', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+        --font-display: 'DM Sans', system-ui, -apple-system, sans-serif;
+        --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace;
+      }
+      html {
+        font-size: 14px;
+      }
+      body {
+        font-family: var(--font-sans);
+        background-color: #FAF9F6;
+        color: #161615;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
+      h1, h2, h3, h4, .display {
+        font-family: var(--font-display) !important;
+        letter-spacing: -0.03em;
+      }
+      code, pre, .font-mono {
+        font-family: var(--font-mono) !important;
+      }
+    </style>
   </head>
-  <body class="bg-[#080D1A] text-slate-100 antialiased selection:bg-blue-600 selection:text-white">
+  <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

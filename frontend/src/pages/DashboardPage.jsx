@@ -1,369 +1,243 @@
 import React, { useState } from 'react';
-import { motion } from 'framer-motion';
-import { 
-  LayoutDashboard, Search, ShieldAlert, ShieldCheck, AlertTriangle, 
-  Trash2, Plus, Clock, Building2, Eye, Filter, ArrowUpRight
-} from 'lucide-react';
-import { 
-  PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip,
-  BarChart, Bar, XAxis, YAxis, CartesianGrid
-} from 'recharts';
+import { Search, Trash2, Plus, ArrowUpRight } from 'lucide-react';
+import { BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, ReferenceLine, Tooltip, ResponsiveContainer } from 'recharts';
+import { riskBand, BAND, isSampleRecord, pct } from '../lib/risk';
+import { Panel, PageHeader, Tag } from '../components/ui';
+
+const BAND_FILL = { low: '#0F766E', medium: '#D97706', high: '#DC2626' };
+const BAND_BG = { low: 'bg-teal-600', medium: 'bg-amber-500', high: 'bg-red-600' };
+const FILTERS = [
+  ['all', 'All'],
+  ['low', 'Low'],
+  ['medium', 'Medium'],
+  ['high', 'High'],
+];
 
 export default function DashboardPage({ history = [], onSelectHistoryItem, onQuickAnalyze, onClearHistory }) {
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterRisk, setFilterRisk] = useState('ALL'); // 'ALL' | 'REAL' | 'FAKE' | 'MEDIUM'
+  const [filter, setFilter] = useState('all');
+  const [includeSamples, setIncludeSamples] = useState(false);
 
-  // Metric aggregates
-  const total = history.length;
-  const fakeCount = history.filter(h => h.prediction === 'Fake' || h.risk_score > 60).length;
-  const realCount = history.filter(h => h.prediction === 'Real' || h.risk_score <= 30).length;
-  const mediumCount = total - fakeCount - realCount;
-  const highRiskCount = history.filter(h => h.risk_score > 60).length;
+  const realCount = history.filter((h) => !isSampleRecord(h)).length;
+  const sampleCount = history.length - realCount;
+  const counted = includeSamples ? history : history.filter((h) => !isSampleRecord(h));
+  const counts = { low: 0, medium: 0, high: 0 };
+  counted.forEach((h) => { counts[riskBand(h.risk_score)] += 1; });
+  const total = counted.length;
 
-  // Chart data: Risk Distribution
-  const pieData = [
-    { name: 'Low Risk (Real)', value: Math.max(1, realCount), color: '#10B981' },
-    { name: 'Medium Risk (Caution)', value: Math.max(0, mediumCount), color: '#F59E0B' },
-    { name: 'High Risk (Fake)', value: Math.max(1, fakeCount), color: '#EF4444' }
-  ];
+  const barData = counted
+    .slice(0, 8)
+    .reverse()
+    .map((h, i) => ({ label: `#${i + 1}`, score: h.risk_score, title: h.title, company: h.company }));
 
-  // Chart data: Recent Activity
-  const barData = history.slice(0, 7).reverse().map((item, idx) => ({
-    name: item.company && item.company !== 'Not Specified' 
-      ? item.company.substring(0, 10) 
-      : `Offer #${idx + 1}`,
-    score: item.risk_score
-  }));
-
-  // Filter history
-  const filteredHistory = history.filter(item => {
-    const matchesSearch = 
-      (item.title || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (item.company || '').toLowerCase().includes(searchTerm.toLowerCase());
-
-    if (!matchesSearch) return false;
-
-    if (filterRisk === 'REAL') return item.risk_score <= 30;
-    if (filterRisk === 'FAKE') return item.risk_score > 60;
-    if (filterRisk === 'MEDIUM') return item.risk_score > 30 && item.risk_score <= 60;
-    return true;
+  const rows = history.filter((item) => {
+    const q = searchTerm.toLowerCase();
+    const matches = (item.title || '').toLowerCase().includes(q) || (item.company || '').toLowerCase().includes(q);
+    return matches && (filter === 'all' || riskBand(item.risk_score) === filter);
   });
 
+  const stats = [
+    ['Total', total, '', 'border-t-stone-800', 'text-stone-900'],
+    ['High risk', counts.high, pct(counts.high, total), 'border-t-red-600', 'text-red-700'],
+    ['Medium risk', counts.medium, pct(counts.medium, total), 'border-t-amber-500', 'text-amber-700'],
+    ['Low risk', counts.low, pct(counts.low, total), 'border-t-teal-600', 'text-teal-700'],
+  ];
+
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-      
-      {/* Top Header & Quick Action */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-6">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-              User Analysis Dashboard
-            </h1>
-            <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-blue-500/15 text-blue-400 border border-blue-500/30">
-              Demo Storage
-            </span>
-          </div>
-          <p className="text-xs sm:text-sm text-slate-400 mt-1">
-            Monitor real vs fraudulent submissions, historical scans, and threat severity trends.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-3">
+    <div className="page space-y-6 py-8">
+      <PageHeader
+        eyebrow="History"
+        title="Analysis ledger"
+        description="Offers you have checked on this device."
+        actions={
           <button
+            type="button"
             onClick={onQuickAnalyze}
-            className="px-5 py-2.5 rounded-xl font-bold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 shadow-lg shadow-blue-600/25 transition-all duration-200 cursor-pointer flex items-center gap-2 text-sm"
+            className="inline-flex items-center gap-1.5 rounded-md bg-[#0F4C5C] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#0B3A47]"
           >
-            <Plus className="w-4 h-4" />
-            <span>Quick Analyse Offer</span>
+            <Plus className="h-4 w-4" />
+            Analyse offer
           </button>
-        </div>
-      </div>
+        }
+      />
 
-      {/* METRIC OVERVIEW CARDS (4 Cards) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-        
-        {/* Card 1: Total Analyses */}
-        <div className="glass-panel rounded-2xl p-5 border border-slate-800">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-              Total Analyses
-            </span>
-            <div className="w-8 h-8 rounded-lg bg-blue-500/15 text-blue-400 flex items-center justify-center">
-              <LayoutDashboard className="w-4 h-4" />
+      {/* Summary strip */}
+      <section aria-label="Summary" className="overflow-hidden rounded-lg border border-stone-200 bg-white">
+        <dl className="grid grid-cols-2 divide-y divide-stone-200 lg:grid-cols-4 lg:divide-x lg:divide-y-0">
+          {stats.map(([label, value, share, borderTop, color]) => (
+            <div key={label} className={`border-t-[3px] p-5 ${borderTop}`}>
+              <dt className="font-mono text-[11px] uppercase tracking-wider text-stone-500">{label}</dt>
+              <dd className="mt-2 flex items-baseline gap-2">
+                <span className={`num text-3xl font-bold ${color}`}>{value}</span>
+                {share && <span className="font-mono text-xs text-stone-400">{share}</span>}
+              </dd>
             </div>
-          </div>
-          <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-3xl font-extrabold text-white font-sans">{total}</span>
-            <span className="text-xs text-slate-500">Inspections logged</span>
-          </div>
-          <p className="text-[11px] text-slate-500 mt-2">Saved in browser session history</p>
+          ))}
+        </dl>
+
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-stone-200 bg-stone-50 px-5 py-2.5 text-xs text-stone-500">
+          <span>
+            {includeSamples
+              ? `Counting ${realCount} real and ${sampleCount} sample records.`
+              : `Counting ${realCount} real ${realCount === 1 ? 'analysis' : 'analyses'}. ${sampleCount} sample ${sampleCount === 1 ? 'record is' : 'records are'} excluded.`}
+          </span>
+          {sampleCount > 0 && (
+            <label className="inline-flex cursor-pointer items-center gap-2 font-medium text-stone-700">
+              <input type="checkbox" checked={includeSamples} onChange={(e) => setIncludeSamples(e.target.checked)} className="h-3.5 w-3.5 accent-[#0F4C5C]" />
+              Include sample records
+            </label>
+          )}
         </div>
+      </section>
 
-        {/* Card 2: Real-Looking Offers */}
-        <div className="glass-panel rounded-2xl p-5 border border-emerald-500/20">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-emerald-400 uppercase tracking-wider">
-              Real-Looking Offers
-            </span>
-            <div className="w-8 h-8 rounded-lg bg-emerald-500/15 text-emerald-400 flex items-center justify-center">
-              <ShieldCheck className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-3xl font-extrabold text-white font-sans">{realCount}</span>
-            <span className="text-xs text-emerald-400 font-medium">
-              {total > 0 ? `${Math.round((realCount / total) * 100)}%` : '0%'}
-            </span>
-          </div>
-          <p className="text-[11px] text-slate-500 mt-2">Low risk, verified characteristics</p>
-        </div>
-
-        {/* Card 3: Fake-Looking Offers */}
-        <div className="glass-panel rounded-2xl p-5 border border-red-500/20">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-red-400 uppercase tracking-wider">
-              Fake-Looking Offers
-            </span>
-            <div className="w-8 h-8 rounded-lg bg-red-500/15 text-red-400 flex items-center justify-center">
-              <ShieldAlert className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-3xl font-extrabold text-white font-sans">{fakeCount}</span>
-            <span className="text-xs text-red-400 font-medium">
-              {total > 0 ? `${Math.round((fakeCount / total) * 100)}%` : '0%'}
-            </span>
-          </div>
-          <p className="text-[11px] text-slate-500 mt-2">Critical scam indicators identified</p>
-        </div>
-
-        {/* Card 4: High-Risk Offers */}
-        <div className="glass-panel rounded-2xl p-5 border border-amber-500/20">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-amber-400 uppercase tracking-wider">
-              High-Risk Offers
-            </span>
-            <div className="w-8 h-8 rounded-lg bg-amber-500/15 text-amber-400 flex items-center justify-center">
-              <AlertTriangle className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-3xl font-extrabold text-white font-sans">{highRiskCount}</span>
-            <span className="text-xs text-amber-400 font-medium">Score &gt; 60</span>
-          </div>
-          <p className="text-[11px] text-slate-500 mt-2">Severe fee or document theft alerts</p>
-        </div>
-
-      </div>
-
-
-      {/* VISUAL CHARTS SECTION (Recharts) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        
-        {/* Left: Risk Category Distribution (Donut Chart) */}
-        <div className="lg:col-span-5 glass-panel rounded-2xl p-6 border border-slate-800">
-          <h3 className="text-sm font-bold text-white uppercase tracking-wider mb-1 flex items-center justify-between">
-            <span>Risk Distribution Breakdown</span>
-            <span className="text-[11px] text-slate-400 font-normal">All Time</span>
-          </h3>
-          <p className="text-xs text-slate-400 mb-4">
-            Proportion of low, medium, and high-risk internships.
-          </p>
-
-          <div className="h-56 w-full flex items-center justify-center">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={pieData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={55}
-                  outerRadius={80}
-                  paddingAngle={5}
-                  dataKey="value"
-                >
-                  {pieData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
+      {/* Charts */}
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
+        <Panel title="Risk distribution" description="Share of analyses per band.">
+          {total === 0 ? (
+            <p className="py-10 text-center text-sm text-stone-500">No analyses to chart yet.</p>
+          ) : (
+            <>
+              <div className="flex h-2.5 gap-0.5 overflow-hidden rounded-[2px] bg-stone-100" role="img" aria-label={`${counts.high} high, ${counts.medium} medium, ${counts.low} low risk`}>
+                {['high', 'medium', 'low'].map((b) => counts[b] > 0 && <div key={b} className={BAND_BG[b]} style={{ width: `${(counts[b] / total) * 100}%` }} />)}
+              </div>
+              <table className="mt-5 w-full text-sm">
+                <thead className="text-left font-mono text-[11px] uppercase text-stone-400">
+                  <tr>
+                    <th className="pb-2 font-medium">Band</th>
+                    <th className="pb-2 text-right font-medium">Count</th>
+                    <th className="pb-2 text-right font-medium">Share</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-stone-100 border-t border-stone-200">
+                  {['high', 'medium', 'low'].map((b) => (
+                    <tr key={b}>
+                      <td className="py-2 font-medium text-stone-800">
+                        <span className="inline-flex items-center gap-2">
+                          <span className={`h-2 w-2 rounded-[1px] ${BAND_BG[b]}`} aria-hidden="true" />
+                          {BAND[b].label}
+                        </span>
+                      </td>
+                      <td className="num py-2 text-right font-semibold text-stone-900">{counts[b]}</td>
+                      <td className="num py-2 text-right text-stone-500">{pct(counts[b], total)}</td>
+                    </tr>
                   ))}
-                </Pie>
-                <RechartsTooltip 
-                  contentStyle={{ backgroundColor: '#0B132B', borderColor: '#1E293B', borderRadius: '8px', fontSize: '12px' }}
-                  itemStyle={{ color: '#E2E8F0' }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
+                </tbody>
+              </table>
+            </>
+          )}
+        </Panel>
 
-          <div className="flex items-center justify-around text-xs text-slate-400 pt-2 border-t border-slate-800">
-            <div className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
-              <span>Real ({realCount})</span>
+        <Panel title="Recent risk scores" description="Last 8 analyses. Dashed lines mark 30 and 60 thresholds.">
+          {barData.length === 0 ? (
+            <p className="py-10 text-center text-sm text-stone-500">No analyses to chart yet.</p>
+          ) : (
+            <div className="h-52 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={barData} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
+                  <CartesianGrid vertical={false} stroke="#E7E5E4" />
+                  <XAxis dataKey="label" tickLine={false} axisLine={{ stroke: '#E7E5E4' }} tick={{ fill: '#78716C', fontSize: 11, fontFamily: 'IBM Plex Mono' }} />
+                  <YAxis domain={[0, 100]} ticks={[0, 30, 60, 100]} tickLine={false} axisLine={false} tick={{ fill: '#78716C', fontSize: 11, fontFamily: 'IBM Plex Mono' }} />
+                  <ReferenceLine y={30} stroke="#0F766E" strokeDasharray="3 3" />
+                  <ReferenceLine y={60} stroke="#DC2626" strokeDasharray="3 3" />
+                  <Tooltip
+                    cursor={{ fill: '#FAF9F6' }}
+                    contentStyle={{ border: '1px solid #D6D3D1', borderRadius: 4, fontSize: 12, boxShadow: 'none' }}
+                    labelFormatter={(_, p) => p?.[0]?.payload?.title || ''}
+                    formatter={(v, _n, item) => [`${v} / 100`, item?.payload?.company || 'Risk score']}
+                  />
+                  <Bar dataKey="score" maxBarSize={32} radius={[2, 2, 0, 0]} isAnimationActive={false}>
+                    {barData.map((d, i) => <Cell key={i} fill={BAND_FILL[riskBand(d.score)]} />)}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
             </div>
-            <div className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
-              <span>Caution ({mediumCount})</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-red-500"></span>
-              <span>Fake ({fakeCount})</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Right: Recent Threat Severity Trend (Bar Chart) */}
-        <div className="lg:col-span-7 glass-panel rounded-2xl p-6 border border-slate-800">
-          <h3 className="text-sm font-bold text-white uppercase tracking-wider mb-1 flex items-center justify-between">
-            <span>Recent Scan Risk Scores</span>
-            <span className="text-[11px] text-slate-400 font-normal">Last 7 Inspections</span>
-          </h3>
-          <p className="text-xs text-slate-400 mb-4">
-            Risk score comparison (0 = Completely Safe, 100 = Critical Scam).
-          </p>
-
-          <div className="h-56 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={barData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1E293B" />
-                <XAxis dataKey="name" stroke="#64748B" fontSize={11} />
-                <YAxis domain={[0, 100]} stroke="#64748B" fontSize={11} />
-                <RechartsTooltip 
-                  contentStyle={{ backgroundColor: '#0B132B', borderColor: '#1E293B', borderRadius: '8px', fontSize: '12px' }}
-                  itemStyle={{ color: '#E2E8F0' }}
-                />
-                <Bar dataKey="score" radius={[6, 6, 0, 0]} fill="#3B82F6" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-
-          <div className="flex items-center justify-between text-xs text-slate-500 pt-2 border-t border-slate-800">
-            <span>Score 0–30: Safe</span>
-            <span>Score 31–60: Review Needed</span>
-            <span className="text-red-400 font-semibold">Score 61+: Fraud Warning</span>
-          </div>
-        </div>
-
+          )}
+        </Panel>
       </div>
 
-
-      {/* RECENT ANALYSIS HISTORY TABLE */}
-      <div className="glass-panel rounded-2xl p-6 border border-slate-800 space-y-4">
-        
-        {/* Table Controls */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h3 className="text-base font-bold text-white">
-              Recent Analysis History
-            </h3>
-            <p className="text-xs text-slate-400 mt-0.5">
-              Inspect past scans, review verdicts, or re-open full analysis reports.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3">
-            {/* Search Input */}
+      {/* History Table */}
+      <Panel
+        title="Saved analyses"
+        description="Open any row to review its evidence."
+        bodyClassName=""
+        action={
+          <div className="flex flex-wrap items-center gap-2">
             <div className="relative">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-stone-400" aria-hidden="true" />
               <input
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Search by title or company..."
-                className="glass-input pl-9 pr-3 py-1.5 rounded-lg text-xs w-56"
+                placeholder="Search title or company"
+                aria-label="Search history"
+                className="field w-48 bg-white py-1.5 pl-8 text-xs"
               />
             </div>
-
-            {/* Filter Pill */}
-            <div className="flex items-center bg-slate-900 border border-slate-800 rounded-lg p-0.5 text-xs">
-              {['ALL', 'REAL', 'FAKE', 'MEDIUM'].map(mode => (
+            <div className="inline-flex rounded border border-stone-200 bg-stone-100 p-0.5" role="group" aria-label="Filter by risk">
+              {FILTERS.map(([id, label]) => (
                 <button
-                  key={mode}
-                  onClick={() => setFilterRisk(mode)}
-                  className={`px-2.5 py-1 rounded-md font-medium transition-colors cursor-pointer ${
-                    filterRisk === mode
-                      ? 'bg-blue-600 text-white'
-                      : 'text-slate-400 hover:text-white'
+                  key={id}
+                  type="button"
+                  aria-pressed={filter === id}
+                  onClick={() => setFilter(id)}
+                  className={`rounded px-2.5 py-1 text-xs font-medium transition-colors ${
+                    filter === id ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-600 hover:text-stone-900'
                   }`}
                 >
-                  {mode}
+                  {label}
                 </button>
               ))}
             </div>
-
-            {/* Clear History */}
             {history.length > 0 && (
               <button
+                type="button"
                 onClick={onClearHistory}
-                title="Clear local scan history"
-                className="p-2 rounded-lg text-slate-400 hover:text-red-400 hover:bg-slate-800 transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-stone-500 transition-colors hover:bg-red-50 hover:text-red-700"
               >
-                <Trash2 className="w-4 h-4" />
+                <Trash2 className="h-3.5 w-3.5" />
+                Clear
               </button>
             )}
           </div>
-        </div>
-
-        {/* History Table */}
+        }
+      >
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-slate-900/80 text-slate-400 uppercase tracking-wider border-y border-slate-800 font-semibold">
+          <table className="w-full min-w-[34rem] text-left text-sm">
+            <thead className="border-b border-stone-200 bg-stone-50 font-mono text-[11px] uppercase tracking-wider text-stone-500">
               <tr>
-                <th className="py-3 px-4">Internship Details</th>
-                <th className="py-3 px-4">Organization</th>
-                <th className="py-3 px-4">Risk Score</th>
-                <th className="py-3 px-4">Verdict</th>
-                <th className="py-3 px-4">Timestamp</th>
-                <th className="py-3 px-4 text-right">Action</th>
+                <th className="px-5 py-2.5 font-medium">Internship</th>
+                <th className="hidden px-3 py-2.5 font-medium sm:table-cell">Organisation</th>
+                <th className="px-3 py-2.5 font-medium">Score</th>
+                <th className="px-3 py-2.5 font-medium">Risk</th>
+                <th className="hidden px-3 py-2.5 font-medium md:table-cell">Date</th>
+                <th className="px-5 py-2.5 text-right font-medium"><span className="sr-only">Open</span></th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/80">
-              {filteredHistory.length > 0 ? (
-                filteredHistory.map((item) => {
-                  const isFake = item.risk_score > 60;
-                  const isMedium = item.risk_score > 30 && item.risk_score <= 60;
-
+            <tbody className="divide-y divide-stone-200">
+              {rows.length > 0 ? (
+                rows.map((item) => {
+                  const band = riskBand(item.risk_score);
+                  const sample = isSampleRecord(item);
+                  const rowTint = band === 'high' ? 'bg-red-50/40 hover:bg-red-50/70' : 'hover:bg-stone-50';
                   return (
-                    <tr key={item.id} className="hover:bg-slate-800/30 transition-colors">
-                      <td className="py-3.5 px-4 font-medium text-white max-w-xs truncate">
-                        {item.title}
+                    <tr key={item.id} className={`transition-colors ${rowTint}`}>
+                      <td className="max-w-xs px-5 py-3">
+                        <p className="truncate font-semibold text-stone-900">{item.title}</p>
+                        <p className="truncate text-xs text-stone-500 sm:hidden">{item.company}</p>
+                        {sample && <span className="mt-1 inline-block"><Tag>Sample</Tag></span>}
                       </td>
-                      <td className="py-3.5 px-4 text-slate-300">
-                        <span className="flex items-center gap-1.5">
-                          <Building2 className="w-3.5 h-3.5 text-slate-400" />
-                          {item.company}
-                        </span>
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <div className="flex items-center gap-2">
-                          <span className={`font-mono font-bold ${
-                            isFake ? 'text-red-400' : isMedium ? 'text-amber-400' : 'text-emerald-400'
-                          }`}>
-                            {item.risk_score}
-                          </span>
-                          <span className="text-[10px] text-slate-500">/100</span>
-                        </div>
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${
-                          isFake ? 'bg-red-500/15 text-red-400 border-red-500/30' :
-                          isMedium ? 'bg-amber-500/15 text-amber-400 border-amber-500/30' :
-                          'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
-                        }`}>
-                          {item.prediction}
-                        </span>
-                      </td>
-                      <td className="py-3.5 px-4 text-slate-400 text-[11px]">
-                        <span className="flex items-center gap-1">
-                          <Clock className="w-3 h-3 text-slate-500" />
-                          {item.created_at}
-                        </span>
-                      </td>
-                      <td className="py-3.5 px-4 text-right">
+                      <td className="hidden max-w-[12rem] truncate px-3 py-3 text-stone-600 sm:table-cell">{item.company}</td>
+                      <td className="num px-3 py-3 font-semibold text-stone-900">{item.risk_score}</td>
+                      <td className="px-3 py-3"><Tag tone={BAND[band].tone}>{BAND[band].label}</Tag></td>
+                      <td className="hidden whitespace-nowrap px-3 py-3 font-mono text-xs text-stone-500 md:table-cell">{item.created_at}</td>
+                      <td className="px-5 py-3 text-right">
                         <button
+                          type="button"
                           onClick={() => onSelectHistoryItem(item)}
-                          className="text-xs text-blue-400 hover:text-blue-300 font-semibold cursor-pointer inline-flex items-center gap-1"
+                          className="inline-flex items-center gap-1 text-xs font-semibold text-[#0F4C5C] hover:underline"
                         >
-                          <span>Inspect</span>
-                          <ArrowUpRight className="w-3.5 h-3.5" />
+                          Open
+                          <ArrowUpRight className="h-3.5 w-3.5" />
                         </button>
                       </td>
                     </tr>
@@ -371,22 +245,18 @@ export default function DashboardPage({ history = [], onSelectHistoryItem, onQui
                 })
               ) : (
                 <tr>
-                  <td colSpan={6} className="py-8 text-center text-slate-500">
-                    No history entries found matching your query.
+                  <td colSpan={6} className="px-5 py-10 text-center text-sm text-stone-500">
+                    {history.length === 0 ? 'No analyses yet. Analyse an offer and it will appear here.' : 'No records match your search or filter.'}
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
-
-        <div className="text-[11px] text-slate-500 pt-2 border-t border-slate-800/80 flex items-center justify-between">
-          <span>*Demo analysis records are preserved locally in browser storage.</span>
-          <span>Ready for production database sync (PostgreSQL / MongoDB).</span>
-        </div>
-
-      </div>
-
+        <p className="border-t border-stone-200 bg-stone-50 px-5 py-2.5 text-xs text-stone-500">
+          Stored locally in your browser (latest 50 analyses).
+        </p>
+      </Panel>
     </div>
   );
 }
