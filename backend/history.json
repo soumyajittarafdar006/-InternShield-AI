@@ -1,5 +1,35 @@
 [
   {
+    "id": "f01f99f6-ad4c-4033-885f-bbdeaf470b10",
+    "created_at": "2026-11-19 08:56:11",
+    "title": "Data Analyst Internship - Selected Candidates",
+    "company": "Not Specified",
+    "prediction": "Real (With Caution)",
+    "risk_score": 35,
+    "risk_level": "Medium Risk",
+    "model_used": "Logistic Regression"
+  },
+  {
+    "id": "48e3a716-7971-4ef7-95e9-28dcc3b6885e",
+    "created_at": "2026-11-19 08:43:22",
+    "title": "Data Analyst Intern",
+    "company": "Tata Consultancy Services",
+    "prediction": "Real (With Caution)",
+    "risk_score": 35,
+    "risk_level": "Medium Risk",
+    "model_used": "Logistic Regression"
+  },
+  {
+    "id": "b55a9036-04dc-47e3-b6e3-6f2bcea9317e",
+    "created_at": "2026-11-19 08:42:53",
+    "title": "Data Entry Intern",
+    "company": "TechPro Career Hub",
+    "prediction": "Fake",
+    "risk_score": 87,
+    "risk_level": "High Risk",
+    "model_used": "Logistic Regression"
+  },
+  {
     "id": "62bb6e61-784e-473d-8424-87d2d6861bd4",
     "created_at": "2026-11-12 14:40:11",
     "title": "# SAMPLE \u2014 NOT AN OFFICIAL MICROSOFT DOC...",

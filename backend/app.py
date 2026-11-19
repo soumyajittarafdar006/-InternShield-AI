@@ -1,12 +1,16 @@
 """
 InternShield AI - Flask REST API Backend
-Provides AI detection endpoints, model metrics, and analysis history.
+Provides AI detection endpoints, model metrics, analysis history,
+and domain intelligence (DNS, live-site and domain-age checks).
 """
 
 import os
+import re
 import sys
 import json
 import uuid
+import socket
+import ipaddress
 import datetime
 
 # Ensure backend directory is in python search path
@@ -14,6 +18,8 @@ CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 if CURRENT_DIR not in sys.path:
     sys.path.insert(0, CURRENT_DIR)
 
+import requests
+import whois
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 
@@ -140,6 +146,86 @@ def analyze_internship():
             "error": "An error occurred while evaluating the internship.",
             "details": str(e)
         }), 500
+
+# ---------------------------------------------------------------------------
+# Domain intelligence: email-to-website match + domain age (WHOIS)
+# ---------------------------------------------------------------------------
+DOMAIN_RE = re.compile(r"^(?=.{4,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$")
+
+def _is_public_host(host):
+    """Block lookups that would resolve to private/internal addresses (SSRF guard)."""
+    try:
+        for info in socket.getaddrinfo(host, None):
+            ip = ipaddress.ip_address(info[4][0])
+            if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
+                return False
+        return True
+    except Exception:
+        return False
+
+@app.route("/api/domain-check", methods=["GET"])
+def domain_check():
+    """
+    Checks a recruiter's email domain:
+      - does it resolve in DNS?
+      - does a live website answer on it?
+      - how old is the registration (WHOIS creation date)?
+    """
+    domain = (request.args.get("domain") or "").lower().strip()
+    if not DOMAIN_RE.match(domain):
+        return jsonify({"error": "Invalid domain."}), 400
+
+    # Is the internet reachable at all? If not, report "unknown", never "does not exist".
+    try:
+        socket.gethostbyname("dns.google")
+    except socket.gaierror:
+        return jsonify({"dns_resolves": None, "site_live": None, "age_days": None,
+                        "created": None, "registrar": None}), 200
+
+    # DNS
+    try:
+        socket.gethostbyname(domain)
+        dns_ok = True
+    except socket.gaierror:
+        dns_ok = False
+
+    # Live website (None = unknown, e.g. timeout on a slow connection)
+    live = False
+    if dns_ok and _is_public_host(domain):
+        timed_out = False
+        for host in (domain, "www." + domain):
+            try:
+                r = requests.get(f"https://{host}", timeout=5, allow_redirects=True,
+                                 headers={"User-Agent": "InternShieldAI-DomainCheck/1.0"})
+                if r.status_code < 500:
+                    live = True
+                    break
+            except requests.Timeout:
+                timed_out = True
+            except requests.RequestException:
+                continue
+        if not live and timed_out:
+            live = None
+
+    # Domain age
+    age_days = created = registrar = None
+    try:
+        w = whois.whois(domain)
+        c = w.creation_date[0] if isinstance(w.creation_date, list) else w.creation_date
+        if c:
+            created = c.date().isoformat()
+            age_days = max(0, (datetime.datetime.now() - c.replace(tzinfo=None)).days)
+        registrar = w.registrar
+    except Exception as e:
+        print(f"WHOIS lookup failed for {domain}: {e}")
+
+    return jsonify({
+        "dns_resolves": dns_ok,
+        "site_live": live,
+        "age_days": age_days,
+        "created": created,
+        "registrar": registrar
+    }), 200
 
 @app.route("/api/history", methods=["GET"])
 def get_history():

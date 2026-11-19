@@ -3,6 +3,8 @@
  * Handles communication with Flask REST API with graceful offline fallback.
  */
 
+import { applyDomainIntel } from './domainCheck';
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
 
 export async function checkBackendHealth() {
@@ -27,6 +29,11 @@ export async function checkBackendHealth() {
 }
 
 export async function analyzeInternship(formData) {
+  const base = await baseAnalyze(formData);
+  return applyDomainIntel(base, formData);
+}
+
+async function baseAnalyze(formData) {
   try {
     const response = await fetch(`${API_BASE_URL}/analyze`, {
       method: 'POST',

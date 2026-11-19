@@ -3,10 +3,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Search, Trash2, Sparkles, AlertCircle, FileText, Building, 
   Mail, Globe, IndianRupee, Clock, CheckCircle2, ChevronRight,
-  ShieldCheck, Loader2, RefreshCw
+  ShieldCheck, Loader2, RefreshCw, Upload, X
 } from 'lucide-react';
 import { SAMPLE_OFFERS } from '../data/samples';
 import { analyzeInternship } from '../services/api';
+import { extractPdfText, parseOfferText } from '../services/pdfExtract';
 import ResultModal from '../components/ResultModal';
 
 export default function AnalyzePage({ onAnalysisComplete, onGoToDashboard }) {
@@ -29,6 +30,8 @@ export default function AnalyzePage({ onAnalysisComplete, onGoToDashboard }) {
   const [validationError, setValidationError] = useState('');
   const [activeTab, setActiveTab] = useState('form'); // 'form' | 'paste'
   const [currentResult, setCurrentResult] = useState(null);
+  const [pdfState, setPdfState] = useState({ status: 'idle' }); // idle | reading | done | error
+  const [dragOver, setDragOver] = useState(false);
 
   const loadingStages = [
     "Pre-processing text & removing formatting noise...",
@@ -60,6 +63,7 @@ export default function AnalyzePage({ onAnalysisComplete, onGoToDashboard }) {
     });
     setValidationError('');
     setCurrentResult(null);
+    setPdfState({ status: 'idle' });
   };
 
   const handleLoadSample = (sampleId) => {
@@ -71,6 +75,34 @@ export default function AnalyzePage({ onAnalysisComplete, onGoToDashboard }) {
       });
       setValidationError('');
       setCurrentResult(null);
+    }
+  };
+
+  const handlePdf = async (file) => {
+    if (!file) return;
+    if (file.type !== 'application/pdf' && !/\.pdf$/i.test(file.name)) {
+      setPdfState({ status: 'error', message: 'Please choose a PDF file.' });
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setPdfState({ status: 'error', message: 'This PDF is larger than 10 MB. Please use a smaller file.' });
+      return;
+    }
+    setPdfState({ status: 'reading', name: file.name });
+    try {
+      const { text, pages } = await extractPdfText(file);
+      if (text.length < 20) {
+        setPdfState({ status: 'error', message: 'This PDF has no readable text (it may be a scanned picture). Please paste the offer text instead.' });
+        return;
+      }
+      const parsed = parseOfferText(text);
+      setFormData((prev) => ({ ...prev, ...parsed }));
+      setActiveTab('form');
+      setValidationError('');
+      setCurrentResult(null);
+      setPdfState({ status: 'done', name: file.name, pages, filled: Object.keys(parsed).filter((k) => k !== 'full_text').length });
+    } catch (err) {
+      setPdfState({ status: 'error', message: 'We could not read this PDF. It may be password-protected or damaged. You can paste the text instead.' });
     }
   };
 
@@ -142,6 +174,60 @@ export default function AnalyzePage({ onAnalysisComplete, onGoToDashboard }) {
         <p className="text-sm sm:text-base text-slate-400 mt-2">
           Submit the internship details or paste the offer letter. Our NLP engine will cross-examine linguistic features, registration fee demands, and recruiter authenticity.
         </p>
+      </div>
+
+      {/* Upload a PDF offer letter */}
+      <div className="glass-panel rounded-2xl p-4 sm:p-5 mb-6">
+        <div className="flex items-start gap-3 mb-3">
+          <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/25 flex items-center justify-center text-blue-400 shrink-0">
+            <Upload className="w-5 h-5" />
+          </div>
+          <div>
+            <h3 className="text-base font-bold text-white">Got the offer as a PDF? Upload it</h3>
+            <p className="text-sm text-slate-400">
+              We read the text on your own device and fill the form for you. Check the details, then press Analyse. Your PDF is never sent to a server.
+            </p>
+          </div>
+        </div>
+        <label
+          onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={(e) => { e.preventDefault(); setDragOver(false); handlePdf(e.dataTransfer.files[0]); }}
+          className={`flex flex-col items-center justify-center gap-1 text-center px-4 py-6 rounded-xl border-2 border-dashed cursor-pointer transition-colors ${
+            dragOver ? 'border-blue-500 bg-blue-500/10' : 'border-slate-700 hover:border-blue-500/60 bg-slate-950/40'
+          }`}
+        >
+          <input
+            type="file"
+            accept="application/pdf,.pdf"
+            className="sr-only"
+            onChange={(e) => { handlePdf(e.target.files[0]); e.target.value = ''; }}
+          />
+          {pdfState.status === 'reading' ? (
+            <span className="flex items-center gap-2 text-sm font-semibold text-slate-200">
+              <Loader2 className="w-4 h-4 animate-spin" /> Reading {pdfState.name}...
+            </span>
+          ) : (
+            <>
+              <span className="text-sm font-semibold text-slate-200">Click to choose a PDF, or drag it here</span>
+              <span className="text-xs text-slate-400">PDF only, up to 10 MB</span>
+            </>
+          )}
+        </label>
+        {pdfState.status === 'done' && (
+          <div className="mt-3 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-sm flex items-start gap-2">
+            <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
+            <span>
+              Read <strong>{pdfState.name}</strong> ({pdfState.pages} {pdfState.pages === 1 ? 'page' : 'pages'}) and filled {pdfState.filled} fields. Please check them below before you analyse.
+            </span>
+          </div>
+        )}
+        {pdfState.status === 'error' && (
+          <div className="mt-3 p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+            <span>{pdfState.message}</span>
+          </div>
+        )}
       </div>
 
       {/* Sample Quick-Selector Pills */}
